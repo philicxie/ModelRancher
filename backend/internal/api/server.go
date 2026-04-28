@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -13,6 +15,7 @@ import (
 // Server HTTP服务器
 type Server struct {
 	router *gin.Engine
+	srv    *http.Server
 }
 
 // Router 路由
@@ -75,7 +78,21 @@ func NewRouter(taskService *service.TaskService, storageService *service.Storage
 
 // Start 启动服务器
 func (s *Server) Start(port string) error {
-	return s.router.Run(":" + port)
+	s.srv = &http.Server{
+		Addr:    ":" + port,
+		Handler: s.router,
+	}
+	return s.srv.ListenAndServe()
+}
+
+// Close 优雅关闭服务器
+func (s *Server) Close() error {
+	if s.srv != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return s.srv.Shutdown(ctx)
+	}
+	return nil
 }
 
 // createTask 创建任务
