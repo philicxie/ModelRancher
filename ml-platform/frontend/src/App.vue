@@ -9,7 +9,7 @@
             <path d="M2 17l10 5 10-5"/>
             <path d="M2 12l10 5 10-5"/>
           </svg>
-          <span v-if="!isSidebarCollapsed" class="logo-text">ModelRancher</span>
+          <span v-if="!isSidebarCollapsed" class="logo-text">ML Platform</span>
         </div>
         <button class="collapse-btn" @click="toggleSidebar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -47,6 +47,17 @@
             <line x1="8" y1="12" x2="16" y2="12"/>
           </svg>
           <span v-if="!isSidebarCollapsed">创建任务</span>
+        </router-link>
+
+        <div class="nav-divider"></div>
+
+        <div class="nav-group-label" v-if="!isSidebarCollapsed">资源</div>
+        <router-link to="/instances" class="nav-item" :class="{ 'active': route.path === '/instances' }">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+          </svg>
+          <span v-if="!isSidebarCollapsed">实例管理</span>
         </router-link>
 
         <div class="nav-divider"></div>

@@ -5,6 +5,7 @@ import TaskCreate from '../views/TaskCreate.vue'
 import TaskDetail from '../views/TaskDetail.vue'
 import Storage from '../views/Storage.vue'
 import Images from '../views/Images.vue'
+import Instances from '../views/Instances.vue'
 
 const routes = [
   { path: '/', name: 'Dashboard', component: Dashboard },
@@ -12,7 +13,8 @@ const routes = [
   { path: '/create', name: 'TaskCreate', component: TaskCreate },
   { path: '/task/:id', name: 'TaskDetail', component: TaskDetail, props: true },
   { path: '/storage', name: 'Storage', component: Storage },
-  { path: '/images', name: 'Images', component: Images }
+  { path: '/images', name: 'Images', component: Images },
+  { path: '/instances', name: 'Instances', component: Instances }
 ]
 
 export default createRouter({

@@ -20,9 +20,11 @@ type Server struct {
 
 // Router 路由
 type Router struct {
-	taskService    *service.TaskService
-	storageService *service.StorageService
-	executor       *service.ExecutorService
+	taskService     *service.TaskService
+	storageService  *service.StorageService
+	executor        *service.ExecutorService
+	gpuService      *service.GPUService
+	instanceService *service.InstanceService
 }
 
 // NewServer 创建服务器
@@ -64,15 +66,35 @@ func NewServer(router *Router) *Server {
 		storage.GET("/download-url", router.getDownloadURL)
 	}
 
+	// GPU实例管理
+	gpu := r.Group("/api/v1/gpu")
+	{
+		gpu.GET("/instances", router.searchGPUInstances)
+		gpu.GET("/providers", router.listGPUProviders)
+	}
+
+	// 实例租赁管理
+	offers := r.Group("/api/v1/offers")
+	{
+		offers.POST("", router.createOffer)
+		offers.GET("", router.listOffers)
+		offers.GET("/:id", router.getOffer)
+		offers.POST("/:id/stop", router.stopOffer)
+		offers.POST("/:id/start", router.startOffer)
+		offers.DELETE("/:id", router.destroyOffer)
+	}
+
 	return &Server{router: r}
 }
 
 // NewRouter 创建路由
-func NewRouter(taskService *service.TaskService, storageService *service.StorageService, executor *service.ExecutorService) *Router {
+func NewRouter(taskService *service.TaskService, storageService *service.StorageService, executor *service.ExecutorService, gpuService *service.GPUService, instanceService *service.InstanceService) *Router {
 	return &Router{
-		taskService:    taskService,
-		storageService: storageService,
-		executor:       executor,
+		taskService:     taskService,
+		storageService:  storageService,
+		executor:        executor,
+		gpuService:      gpuService,
+		instanceService: instanceService,
 	}
 }
 
@@ -209,6 +231,111 @@ func (r *Router) getDownloadURL(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"url": url})
+}
+
+// listGPUProviders 列出可用的GPU Provider
+func (r *Router) listGPUProviders(c *gin.Context) {
+	providers := r.gpuService.ListProviders(c.Request.Context())
+	c.JSON(http.StatusOK, gin.H{
+		"providers": providers,
+	})
+}
+
+// searchGPUInstances 搜索GPU实例
+func (r *Router) searchGPUInstances(c *gin.Context) {
+	var req service.SearchGPUInstancesRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	instances, err := r.gpuService.SearchGPUInstances(c.Request.Context(), &req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"instances": instances,
+		"total":     len(instances),
+	})
+}
+
+// createOffer 创建租赁
+func (r *Router) createOffer(c *gin.Context) {
+	var req model.CreateOfferRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	instance, err := r.instanceService.CreateOffer(c.Request.Context(), &req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, instance)
+}
+
+// listOffers 列出用户的租赁实例
+func (r *Router) listOffers(c *gin.Context) {
+	userID := c.Query("user_id")
+	if userID == "" {
+		userID = "default"
+	}
+
+	instances, err := r.instanceService.ListUserInstances(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"instances": instances,
+		"total":     len(instances),
+	})
+}
+
+// getOffer 获取租赁详情
+func (r *Router) getOffer(c *gin.Context) {
+	id := c.Param("id")
+	instance, err := r.instanceService.GetInstance(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, instance)
+}
+
+// stopOffer 停止实例
+func (r *Router) stopOffer(c *gin.Context) {
+	id := c.Param("id")
+	if err := r.instanceService.StopInstance(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Instance stopped"})
+}
+
+// startOffer 启动实例
+func (r *Router) startOffer(c *gin.Context) {
+	id := c.Param("id")
+	if err := r.instanceService.StartInstance(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Instance starting"})
+}
+
+// destroyOffer 销毁实例
+func (r *Router) destroyOffer(c *gin.Context) {
+	id := c.Param("id")
+	if err := r.instanceService.DestroyInstance(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Instance destroyed"})
 }
 
 var clientIDCounter int

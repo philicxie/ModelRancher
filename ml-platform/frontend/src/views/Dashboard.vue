@@ -81,6 +81,20 @@
           </div>
         </div>
 
+        <div class="action-card" @click="$router.push('/pricing')">
+          <div class="action-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+              <line x1="8" y1="21" x2="16" y2="21"/>
+              <line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+          </div>
+          <div class="action-text">
+            <h3>GPU实例</h3>
+            <p>租赁GPU云服务器</p>
+          </div>
+        </div>
+
         <div class="action-card" @click="$router.push('/tasks')">
           <div class="action-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -103,20 +117,6 @@
           <div class="action-text">
             <h3>数据存储</h3>
             <p>管理训练数据文件</p>
-          </div>
-        </div>
-
-        <div class="action-card" @click="$router.push('/images')">
-          <div class="action-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              <circle cx="8.5" cy="8.5" r="1.5"/>
-              <polyline points="21 15 16 10 5 21"/>
-            </svg>
-          </div>
-          <div class="action-text">
-            <h3>镜像管理</h3>
-            <p>选择训练环境</p>
           </div>
         </div>
       </div>

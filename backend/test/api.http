@@ -1,0 +1,265 @@
+### ML Platform API Testing
+### Using VS Code REST Client
+### Base URL - Modify as needed
+@baseUrl = http://localhost:8080/api/v1
+@contentType = application/json
+
+#################################################################
+# Health Check
+#################################################################
+
+### Health Check
+GET {{baseUrl}}/health
+
+#################################################################
+# GPU Provider API
+#################################################################
+
+### List Available GPU Providers
+GET {{baseUrl}}/gpu/providers
+
+#################################################################
+# GPU Instance Search (Browse Available GPUs)
+#################################################################
+
+### Search All Available GPU Instances
+GET {{baseUrl}}/gpu/instances
+
+### Search by Provider (ppio)
+GET {{baseUrl}}/gpu/instances?provider=ppio
+
+### Search by Provider (vastai)
+GET {{baseUrl}}/gpu/instances?provider=vastai
+
+### Search by Provider (local)
+GET {{baseUrl}}/gpu/instances?provider=local
+
+### Search by GPU Type
+GET {{baseUrl}}/gpu/instances?gpu_type=RTX%204096
+
+### Search with Multiple Filters
+GET {{baseUrl}}/gpu/instances?provider=ppio&gpu_type=RTX%204096&max_price=5.0&min_gpus=1
+
+#################################################################
+# User Instance Management (Offers API)
+# Key endpoints for viewing and managing purchased instances
+#################################################################
+
+### 1. List User's Purchased Instances
+### Returns all instances rented by the user, with status synced from provider
+GET {{baseUrl}}/offers?user_id=default
+
+### 2. Get Single Instance Detail (with live provider status sync)
+### Replace {{instance_id}} with actual instance ID from the list above
+GET {{baseUrl}}/offers/352b6428-0663-40b8-af4a-e0b584e5e93b
+
+### 3. Create a New Instance Rental (PPIO)
+### Step 1: Pick offer_id and provider from /gpu/instances response
+POST {{baseUrl}}/offers
+Content-Type: {{contentType}}
+
+{
+  "provider": "ppio",
+  "offer_id": "YOUR_PPIO_PRODUCT_ID",
+  "user_id": "default",
+  "name": "ppio-training-1",
+  "image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
+  "disk_size": 100,
+  "duration_hours": 24,
+  "price_per_hour": 1.5,
+  "gpu_name": "RTX 4096",
+  "num_gpus": 1,
+  "location": "cn-north-1"
+}
+
+### 4. Create a New Instance Rental (Vast.ai)
+POST {{baseUrl}}/offers
+Content-Type: {{contentType}}
+
+{
+  "provider": "vastai",
+  "offer_id": "12345678",
+  "user_id": "default",
+  "name": "vastai-training-1",
+  "image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
+  "disk_size": 50,
+  "duration_hours": 12,
+  "price_per_hour": 2.0,
+  "gpu_name": "RTX 4090",
+  "num_gpus": 1,
+  "location": "US"
+}
+
+### 5. Create a New Instance Rental (Local)
+POST {{baseUrl}}/offers
+Content-Type: {{contentType}}
+
+{
+  "provider": "local",
+  "offer_id": "local-docker",
+  "user_id": "default",
+  "name": "local-test-1",
+  "image": "ubuntu:22.04",
+  "disk_size": 20,
+  "duration_hours": 0,
+  "price_per_hour": 0,
+  "gpu_name": "CPU/Docker",
+  "num_gpus": 0,
+  "location": "本地"
+}
+
+### 6. Stop a Running Instance
+### Replace {{instance_id}} with actual ID
+POST {{baseUrl}}/offers/{{instance_id}}/stop
+
+### 7. Start a Stopped Instance
+### Replace {{instance_id}} with actual ID
+POST {{baseUrl}}/offers/{{instance_id}}/start
+
+### 8. Destroy an Instance (permanent)
+### Replace {{instance_id}} with actual ID
+DELETE {{baseUrl}}/offers/{{instance_id}}
+
+#################################################################
+# Task API - Training Task Management
+#################################################################
+
+### Create a Training Task
+POST {{baseUrl}}/tasks
+Content-Type: {{contentType}}
+
+{
+  "name": "mnist-training",
+  "description": "MNIST digit classification training",
+  "image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
+  "command": "python train.py --epochs 10 --batch-size 64",
+  "data_path": "/app/data/mnist/",
+  "output_path": "/app/output/mnist/",
+  "env_vars": [
+    "PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512",
+    "CUDA_VISIBLE_DEVICES=0"
+  ]
+}
+
+### List All Tasks
+GET {{baseUrl}}/tasks
+
+### Get Task Details
+GET {{baseUrl}}/tasks/{{task_id}}
+
+### Cancel a Running Task
+DELETE {{baseUrl}}/tasks/{{task_id}}
+
+### Get Task Logs (SSE Stream)
+GET {{baseUrl}}/tasks/{{task_id}}/logs?client_id=test-client-1
+
+#################################################################
+# Storage API - Object Storage Management (COS)
+#################################################################
+
+### List All Files
+GET {{baseUrl}}/storage/files
+
+### List Files with Prefix
+GET {{baseUrl}}/storage/files?prefix=data/
+
+### Get Presigned Download URL
+GET {{baseUrl}}/storage/download-url?key=outputs%2Fmodel.pt
+
+#################################################################
+# Example Workflows
+#################################################################
+
+### === Workflow: Rent a PPIO GPU Instance ===
+# Step 1: Browse available GPU offers
+# GET {{baseUrl}}/gpu/instances?provider=ppio
+#
+# Step 2: Pick an offer and create rental
+# POST {{baseUrl}}/offers
+# {
+#   "provider": "ppio",
+#   "offer_id": "<product_id_from_step_1>",
+#   "user_id": "default",
+#   "name": "my-gpu",
+#   "image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
+#   "disk_size": 100,
+#   "gpu_name": "RTX 4096",
+#   "num_gpus": 1
+# }
+# (Save the returned instance.id)
+#
+# Step 3: List user's instances to check status
+# GET {{baseUrl}}/offers?user_id=default
+# Status flow: creating -> running
+#
+# Step 4: Query specific instance detail (syncs provider status)
+# GET {{baseUrl}}/offers/<instance_id>
+# Response includes: status, ssh_host, ssh_port, ssh_user
+#
+# Step 5: Stop instance when idle
+# POST {{baseUrl}}/offers/<instance_id>/stop
+#
+# Step 6: Restart later
+# POST {{baseUrl}}/offers/<instance_id>/start
+#
+# Step 7: Destroy when no longer needed
+# DELETE {{baseUrl}}/offers/<instance_id>
+
+### === Workflow: Check Instance Status After Creation ===
+# 1. Create instance
+#    POST {{baseUrl}}/offers
+#    -> Response: { "id": "inst-xxx", "status": "creating", ... }
+#
+# 2. Poll instance list (status synced from provider)
+#    GET {{baseUrl}}/offers?user_id=default
+#    -> Check status field: creating | running | stopped | destroying | destroyed
+#
+# 3. Query single instance for detailed status
+#    GET {{baseUrl}}/offers/inst-xxx
+#    -> Returns full instance info with provider-synced status and SSH details
+#
+# 4. When status is "running", SSH is ready:
+#    ssh -p <ssh_port> <ssh_user>@<ssh_host>
+
+#################################################################
+# Response Examples
+#################################################################
+
+### Offer List Response:
+# {
+#   "instances": [
+#     {
+#       "id": "uuid-1234",
+#       "provider": "ppio",
+#       "provider_inst_id": "ppio-inst-5678",
+#       "offer_id": "rtx4090-product-id",
+#       "user_id": "default",
+#       "name": "ppio-training-1",
+#       "image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
+#       "status": "running",
+#       "ssh_host": "xxx.gpu-instance.ppinfra.com",
+#       "ssh_port": 55089,
+#       "ssh_user": "root",
+#       "disk_size": 100,
+#       "price_per_hour": 1.5,
+#       "gpu_name": "RTX 4096",
+#       "num_gpus": 1,
+#       "location": "cn-north-1",
+#       "created_at": "2026-05-01T10:00:00Z",
+#       "started_at": "2026-05-01T10:02:00Z"
+#     }
+#   ],
+#   "total": 1
+# }
+
+### Single Instance Detail Response:
+# {
+#   "id": "uuid-1234",
+#   "provider": "ppio",
+#   "provider_inst_id": "ppio-inst-5678",
+#   "status": "running",
+#   "ssh_host": "xxx.gpu-instance.ppinfra.com",
+#   "ssh_port": 55089,
+#   "ssh_user": "root",
+#   ...
+# }
