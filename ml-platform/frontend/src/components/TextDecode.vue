@@ -15,8 +15,7 @@ import { ref, watch, onUnmounted } from 'vue'
 
 const props = defineProps({
   text: { type: String, default: '' },
-  duration: { type: Number, default: 1500 },
-  interval: { type: Number, default: 50 },
+  duration: { type: Number, default: 2000 },
   trigger: { type: Boolean, default: false },
 })
 
@@ -27,6 +26,7 @@ const COLORS = ['#38bdf8', '#22d3ee', '#818cf8', '#c084fc', '#34d399', '#fbbf24'
 
 const displayChars = ref([])
 let timer = null
+let elapsed = 0
 let round = 0
 
 function randomChar() {
@@ -39,9 +39,10 @@ function randomColor() {
 
 function reset() {
   if (timer) {
-    clearInterval(timer)
+    clearTimeout(timer)
     timer = null
   }
+  elapsed = 0
   round = 0
   displayChars.value = props.text.split('').map(() => ({
     ch: randomChar(),
@@ -50,61 +51,63 @@ function reset() {
   }))
 }
 
-function start() {
-  reset()
-  const totalRounds = Math.ceil(props.duration / props.interval)
+function tick() {
+  round++
+  const progress = Math.min(elapsed / props.duration, 1)
+  const progressSq = progress * progress
 
-  timer = setInterval(() => {
-    round++
-    const progress = round / totalRounds
-    const progressSq = progress * progress
+  displayChars.value = displayChars.value.map((item, i) => {
+    if (item.locked) return item
 
-    displayChars.value = displayChars.value.map((item, i) => {
-      if (item.locked) return item
+    const isSpace = props.text[i] === ' '
+    const posFactor = 1 + (props.text.length - 1 - i) / props.text.length * 0.6
+    const lockChance = progressSq * posFactor * 0.85
+    const rand = Math.random()
 
-      // 锁定概率：基础概率 × 位置因子（前面的字符更容易先锁定）× 随机扰动
-      // 空格直接跳过随机字符，保持空格
-      const isSpace = props.text[i] === ' '
-      const posFactor = 1 + (props.text.length - 1 - i) / props.text.length * 0.6
-      const lockChance = progressSq * posFactor * 0.85
-      const rand = Math.random()
-
-      if (!isSpace && rand < lockChance) {
-        return {
-          ch: props.text[i],
-          locked: true,
-          color: null,
-        }
-      }
-
-      // 最后一轮强制锁定
-      if (round >= totalRounds) {
-        return {
-          ch: props.text[i],
-          locked: true,
-          color: null,
-        }
-      }
-
+    if (!isSpace && rand < lockChance) {
       return {
-        ch: isSpace ? ' ' : randomChar(),
-        locked: false,
-        color: randomColor(),
-      }
-    })
-
-    if (round >= totalRounds || displayChars.value.every(c => c.locked)) {
-      clearInterval(timer)
-      timer = null
-      // 确保最终完全一致
-      displayChars.value = props.text.split('').map(ch => ({
-        ch,
+        ch: props.text[i],
         locked: true,
         color: null,
-      }))
-      emit('done')
+      }
     }
-  }, props.interval)
+
+    if (elapsed >= props.duration) {
+      return {
+        ch: props.text[i],
+        locked: true,
+        color: null,
+      }
+    }
+
+    return {
+      ch: isSpace ? ' ' : randomChar(),
+      locked: false,
+      color: randomColor(),
+    }
+  })
+
+  if (elapsed >= props.duration || displayChars.value.every(c => c.locked)) {
+    timer = null
+    displayChars.value = props.text.split('').map(ch => ({
+      ch,
+      locked: true,
+      color: null,
+    }))
+    emit('done')
+    return
+  }
+
+  // interval 从 40ms 逐渐增长到 120ms
+  const nextDelay = 40 + progress * 80
+  elapsed += nextDelay
+
+  timer = setTimeout(tick, nextDelay)
+}
+
+function start() {
+  reset()
+  tick()
 }
 
 function charStyle(char) {
@@ -116,14 +119,12 @@ function charStyle(char) {
 
 watch(() => props.trigger, (val) => {
   if (val) {
-    // 延迟一点点开始，等展开动画开始后再启动文字解码
     setTimeout(() => start(), 80)
   } else {
     if (timer) {
-      clearInterval(timer)
+      clearTimeout(timer)
       timer = null
     }
-    // 折叠时直接显示原文
     displayChars.value = props.text.split('').map(ch => ({
       ch,
       locked: true,
@@ -133,7 +134,7 @@ watch(() => props.trigger, (val) => {
 }, { immediate: true })
 
 onUnmounted(() => {
-  if (timer) clearInterval(timer)
+  if (timer) clearTimeout(timer)
 })
 </script>
 
