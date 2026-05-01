@@ -30,6 +30,8 @@ type Instance struct {
 	SSHHost        string         `json:"ssh_host" gorm:"type:varchar(255)"`
 	SSHPort        int            `json:"ssh_port"`
 	SSHUser        string         `json:"ssh_user" gorm:"type:varchar(50)"`
+	Password       string         `json:"password" gorm:"type:varchar(255)"`
+	SSHCommand     string         `json:"ssh_command" gorm:"type:varchar(255)"`
 	DiskSize       int            `json:"disk_size"`
 	PricePerHour   float64        `json:"price_per_hour"`
 	GPUName        string         `json:"gpu_name" gorm:"type:varchar(100)"`

@@ -51,7 +51,17 @@ GET {{baseUrl}}/offers?user_id=default
 
 ### 2. Get Single Instance Detail (with live provider status sync)
 ### Replace {{instance_id}} with actual instance ID from the list above
-GET {{baseUrl}}/offers/352b6428-0663-40b8-af4a-e0b584e5e93b
+GET {{baseUrl}}/offers/719faea6-b303-484a-83e6-951dec482966
+
+### 2a. Get Instance Metrics (real-time monitoring data)
+### Returns CPU/GPU/Memory/Disk utilization metrics from the provider
+### For PPIO: returns time-series data (default last 60s, 15s interval)
+### For Vast.ai: returns current snapshot as single-point series
+GET {{baseUrl}}/offers/352b6428-0663-40b8-af4a-e0b584e5e93b/metrics
+
+### 2b. Get Instance Metrics with Custom Time Range (PPIO)
+### start_time and end_time are Unix timestamps in seconds
+GET {{baseUrl}}/offers/352b6428-0663-40b8-af4a-e0b584e5e93b/metrics?start_time=1714550400&end_time=1714554000
 
 ### 3. Create a New Instance Rental (PPIO)
 ### Step 1: Pick offer_id and provider from /gpu/instances response

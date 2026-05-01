@@ -616,6 +616,48 @@ func (p *Provider) DestroyInstance(ctx context.Context, instanceID string) error
 	return nil
 }
 
+// GetInstanceMetrics 获取实例监控指标（Vast.ai 只返回当前快照）
+func (p *Provider) GetInstanceMetrics(ctx context.Context, instanceID string, startTime, endTime int64) (*provider.InstanceMetrics, error) {
+	liteInstancesMu.RLock()
+	inst, ok := liteInstances[instanceID]
+	liteInstancesMu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("instance not found: %s", instanceID)
+	}
+
+	remoteInstance, err := p.client.GetInstanceMetrics(ctx, inst.InstanceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get instance metrics: %w", err)
+	}
+
+	now := time.Now().Unix()
+	// Vast.ai metrics 是 fraction (0-1)，转为百分比
+	cpuVal := remoteInstance.CPUUtil * 100
+	gpuVal := remoteInstance.GPUUtil * 100
+	memVal := float64(0)
+	if remoteInstance.MemLimit > 0 {
+		memVal = (remoteInstance.MemUsage / remoteInstance.MemLimit) * 100
+	}
+	gpuMemVal := float64(0)
+	if remoteInstance.GPUTotalRam > 0 {
+		gpuMemVal = (float64(remoteInstance.GPURam) / float64(remoteInstance.GPUTotalRam)) * 100
+	}
+
+	return &provider.InstanceMetrics{
+		CPUUtilization:      []provider.MetricPoint{{Timestamp: now, Value: cpuVal}},
+		MemUtilization:      []provider.MetricPoint{{Timestamp: now, Value: memVal}},
+		RootDiskUtilization: []provider.MetricPoint{{Timestamp: now, Value: remoteInstance.DiskUsage * 100}},
+		GPUUtilizationAvg:   []provider.MetricPoint{{Timestamp: now, Value: gpuVal}},
+		GPUUtilization: []provider.GPUInstanceMetrics{
+			{GPUID: "0", Items: []provider.MetricPoint{{Timestamp: now, Value: gpuVal}}},
+		},
+		GPUMemUtilizationAvg: []provider.MetricPoint{{Timestamp: now, Value: gpuMemVal}},
+		GPUMemUtilization: []provider.GPUInstanceMetrics{
+			{GPUID: "0", Items: []provider.MetricPoint{{Timestamp: now, Value: gpuMemVal}}},
+		},
+	}, nil
+}
+
 // GetInstanceStatus 获取实例状态
 func (p *Provider) GetInstanceStatus(ctx context.Context, instanceID string) (string, error) {
 	liteInstancesMu.RLock()

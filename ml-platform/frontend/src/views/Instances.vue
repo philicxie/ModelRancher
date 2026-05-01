@@ -71,14 +71,10 @@
             </div>
           </div>
 
-          <!-- SSH 信息 -->
-          <div v-if="instance.status === 'running' && instance.ssh_host" class="ssh-block">
-            <div class="ssh-label">SSH 连接</div>
-            <code class="ssh-cmd">ssh -p {{ instance.ssh_port || 22 }} {{ instance.ssh_user || 'root' }}@{{ instance.ssh_host }}</code>
-            <el-button type="primary" size="small" text @click="copySSHCommand(instance)">复制</el-button>
-          </div>
-
           <div class="card-actions">
+            <el-button size="small" text @click="$router.push(`/instance/${instance.id}`)">
+              详情
+            </el-button>
             <template v-if="instance.status === 'running'">
               <el-button size="small" @click="stopInstance(instance)">停止</el-button>
             </template>
@@ -281,7 +277,9 @@ const fetchMyInstances = async () => {
     const res = await fetch(`/api/v1/offers?user_id=${userId}`)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
-    myInstances.value = data.instances || []
+    // 过滤掉已销毁的实例，不在列表中显示
+    const instances = (data.instances || []).filter(i => i.status !== 'destroyed')
+    myInstances.value = instances
   } catch (err) {
     console.error('fetchMyInstances failed:', err)
     ElMessage.error('获取实例列表失败')
@@ -399,12 +397,6 @@ const getStatusTagType = (status) => {
 const getStatusText = (status) => {
   const map = { running: '运行中', stopped: '已停止', starting: '启动中', pending: '创建中', creating: '创建中', destroying: '销毁中', destroyed: '已销毁', failed: '失败' }
   return map[status] || status
-}
-
-const copySSHCommand = async (instance) => {
-  const cmd = `ssh -p ${instance.ssh_port || 22} ${instance.ssh_user || 'root'}@${instance.ssh_host}`
-  await navigator.clipboard.writeText(cmd)
-  ElMessage.success('SSH 命令已复制')
 }
 
 // 实例操作

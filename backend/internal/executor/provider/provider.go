@@ -98,6 +98,9 @@ type ExecutorProvider interface {
 
 	// GetInstance 获取实例详情（含SSH信息）
 	GetInstance(ctx context.Context, instanceID string) (*InstanceInfo, error)
+
+	// GetInstanceMetrics 获取实例监控指标
+	GetInstanceMetrics(ctx context.Context, instanceID string, startTime, endTime int64) (*InstanceMetrics, error)
 }
 
 // ResourceRequest 资源请求
@@ -138,7 +141,32 @@ type InstanceInfo struct {
 	SSHHost    string // SSH主机
 	SSHPort    int    // SSH端口
 	SSHUser    string // SSH用户名
+	Password   string // SSH密码
+	SSHCommand string // 原始SSH命令（如PPIO返回的 ssh root@host -p port）
 	Status     string // 状态
+}
+
+// MetricPoint 单个指标数据点
+type MetricPoint struct {
+	Timestamp int64   `json:"timestamp"`
+	Value     float64 `json:"value"`
+}
+
+// GPUInstanceMetrics 单个GPU的指标数据
+type GPUInstanceMetrics struct {
+	GPUID string        `json:"gpu_id"`
+	Items []MetricPoint `json:"items"`
+}
+
+// InstanceMetrics 实例监控指标
+type InstanceMetrics struct {
+	CPUUtilization      []MetricPoint        `json:"cpu_utilization"`
+	MemUtilization      []MetricPoint        `json:"mem_utilization"`
+	RootDiskUtilization []MetricPoint        `json:"root_disk_utilization"`
+	GPUUtilizationAvg   []MetricPoint        `json:"gpu_utilization_avg"`
+	GPUUtilization      []GPUInstanceMetrics `json:"gpu_utilization"`
+	GPUMemUtilizationAvg []MetricPoint       `json:"gpu_mem_utilization_avg"`
+	GPUMemUtilization   []GPUInstanceMetrics `json:"gpu_mem_utilization"`
 }
 
 // CreateInstanceRequest 创建Lite实例请求

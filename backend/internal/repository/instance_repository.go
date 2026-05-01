@@ -76,13 +76,28 @@ func (r *InstanceRepository) UpdateStatus(ctx context.Context, id string, status
 	return nil
 }
 
-// UpdateSSH 更新SSH信息
-func (r *InstanceRepository) UpdateSSH(ctx context.Context, id string, host string, port int, user string) error {
-	result := r.db.WithContext(ctx).Model(&model.Instance{}).Where("id = ?", id).Updates(map[string]interface{}{
-		"ssh_host": host,
-		"ssh_port": port,
-		"ssh_user": user,
-	})
+// UpdateSSH 更新SSH信息（空值不覆盖已有字段）
+func (r *InstanceRepository) UpdateSSH(ctx context.Context, id string, host string, port int, user string, password string, sshCommand string) error {
+	updates := map[string]interface{}{}
+	if host != "" {
+		updates["ssh_host"] = host
+	}
+	if port != 0 {
+		updates["ssh_port"] = port
+	}
+	if user != "" {
+		updates["ssh_user"] = user
+	}
+	if password != "" {
+		updates["password"] = password
+	}
+	if sshCommand != "" {
+		updates["ssh_command"] = sshCommand
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	result := r.db.WithContext(ctx).Model(&model.Instance{}).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
 		return fmt.Errorf("failed to update ssh: %w", result.Error)
 	}
@@ -104,6 +119,17 @@ func (r *InstanceRepository) ListExpired(ctx context.Context) ([]*model.Instance
 		Where("expires_at IS NOT NULL AND expires_at < ? AND status != ?", time.Now(), model.InstanceStatusDestroyed).
 		Find(&instances).Error; err != nil {
 		return nil, fmt.Errorf("failed to list expired instances: %w", err)
+	}
+	return instances, nil
+}
+
+// ListActive 列出所有非终态实例（用于 metrics 轮询）
+func (r *InstanceRepository) ListActive(ctx context.Context) ([]*model.Instance, error) {
+	var instances []*model.Instance
+	if err := r.db.WithContext(ctx).
+		Where("status != ?", model.InstanceStatusDestroyed).
+		Find(&instances).Error; err != nil {
+		return nil, fmt.Errorf("failed to list active instances: %w", err)
 	}
 	return instances, nil
 }

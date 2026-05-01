@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -79,6 +80,7 @@ func NewServer(router *Router) *Server {
 		offers.POST("", router.createOffer)
 		offers.GET("", router.listOffers)
 		offers.GET("/:id", router.getOffer)
+		offers.GET("/:id/metrics", router.getOfferMetrics)
 		offers.POST("/:id/stop", router.stopOffer)
 		offers.POST("/:id/start", router.startOffer)
 		offers.DELETE("/:id", router.destroyOffer)
@@ -306,6 +308,26 @@ func (r *Router) getOffer(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, instance)
+}
+
+// getOfferMetrics 获取实例监控指标
+func (r *Router) getOfferMetrics(c *gin.Context) {
+	id := c.Param("id")
+	startTime := int64(0)
+	endTime := int64(0)
+	if s := c.Query("start_time"); s != "" {
+		startTime, _ = strconv.ParseInt(s, 10, 64)
+	}
+	if e := c.Query("end_time"); e != "" {
+		endTime, _ = strconv.ParseInt(e, 10, 64)
+	}
+
+	metrics, err := r.instanceService.GetInstanceMetrics(c.Request.Context(), id, startTime, endTime)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, metrics)
 }
 
 // stopOffer 停止实例

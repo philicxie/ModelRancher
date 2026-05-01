@@ -33,6 +33,11 @@ func main() {
 	log.Println("ML Training Platform - Starting...")
 	log.Println(strings.Repeat("=", 60))
 
+	// 0. 加载 .env 文件（如果存在）
+	if err := loadEnvFile(".env"); err != nil {
+		log.Printf("Warning: failed to load .env file: %v", err)
+	}
+
 	// 1. 数据库连接
 	db, err := initDatabase()
 	if err != nil {
@@ -468,6 +473,38 @@ func checkDocker() bool {
 }
 
 // getEnv 获取环境变量，带默认值
+// loadEnvFile 加载 .env 文件并设置环境变量（已存在的不覆盖）
+func loadEnvFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf(".env file not found at %s", path)
+		}
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		// 跳过空行和注释
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		// 去除可能的引号
+		value = strings.Trim(value, `"'`)
+		if key != "" && os.Getenv(key) == "" {
+			os.Setenv(key, value)
+		}
+	}
+	log.Printf("Loaded environment variables from %s", path)
+	return nil
+}
+
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value

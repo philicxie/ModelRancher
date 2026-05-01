@@ -409,6 +409,29 @@ func (p *Provider) GetInstance(ctx context.Context, instanceID string) (*provide
 	return rec.info, nil
 }
 
+// GetInstanceMetrics 获取本地实例监控指标（模拟数据）
+func (p *Provider) GetInstanceMetrics(ctx context.Context, instanceID string, startTime, endTime int64) (*provider.InstanceMetrics, error) {
+	now := time.Now().Unix()
+	// 生成一些模拟的波动数据
+	randFloat := func(min, max float64) float64 {
+		return min + (max-min)*float64(now%100)/100
+	}
+
+	return &provider.InstanceMetrics{
+		CPUUtilization:      []provider.MetricPoint{{Timestamp: now, Value: randFloat(10, 60)}},
+		MemUtilization:      []provider.MetricPoint{{Timestamp: now, Value: randFloat(20, 70)}},
+		RootDiskUtilization: []provider.MetricPoint{{Timestamp: now, Value: randFloat(5, 30)}},
+		GPUUtilizationAvg:   []provider.MetricPoint{{Timestamp: now, Value: randFloat(0, 90)}},
+		GPUUtilization: []provider.GPUInstanceMetrics{
+			{GPUID: "0", Items: []provider.MetricPoint{{Timestamp: now, Value: randFloat(0, 90)}}},
+		},
+		GPUMemUtilizationAvg: []provider.MetricPoint{{Timestamp: now, Value: randFloat(10, 80)}},
+		GPUMemUtilization: []provider.GPUInstanceMetrics{
+			{GPUID: "0", Items: []provider.MetricPoint{{Timestamp: now, Value: randFloat(10, 80)}}},
+		},
+	}, nil
+}
+
 // GetInstanceStatus 获取实例状态
 func (p *Provider) GetInstanceStatus(ctx context.Context, instanceID string) (string, error) {
 	p.instMu.RLock()

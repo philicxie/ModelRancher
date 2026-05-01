@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -232,28 +233,41 @@ type StatusError struct {
 	Message string `json:"message"`
 }
 
+// ConnectComponentSSH PPIO 连接组件 SSH 信息
+type ConnectComponentSSH struct {
+	Port               int    `json:"port"`
+	Address            string `json:"address"`
+	SystemLogAddress   string `json:"systemLogAddress"`
+	InstanceLogAddress string `json:"instanceLogAddress"`
+	SshCommand         string `json:"sshCommand"`
+	Username           string `json:"username"`
+	Password           string `json:"password"`
+	IsRunning          bool   `json:"isRunning"`
+}
+
 // GPUInstance GPU实例信息
 type GPUInstance struct {
-	ID            string        `json:"id"`
-	Id            string        `json:"Id"`
-	Name          string        `json:"name"`
-	ClusterId     string        `json:"clusterId"`
-	ClusterName   string        `json:"clusterName"`
-	Status        string        `json:"status"`
-	ImageUrl      string        `json:"imageUrl"`
-	ProductId     string        `json:"productId"`
-	ProductName   string        `json:"productName"`
-	GpuNum        string        `json:"gpuNum"`
-	RootfsSize    int           `json:"rootfsSize"`
-	PortMappings  []PortMapping `json:"portMappings"`
-	SshCommand    string        `json:"sshCommand"`
-	Password      string        `json:"password"`
-	Network       *NetworkInfo  `json:"network"`
-	StatusError   *StatusError  `json:"statusError"`
-	CreatedAt     string        `json:"createdAt"`
-	LastStartedAt string        `json:"lastStartedAt"`
-	BillingMode   string        `json:"billingMode"`
-	EndTime       string        `json:"endTime"`
+	ID                  string              `json:"id"`
+	Id                  string              `json:"Id"`
+	Name                string              `json:"name"`
+	ClusterId           string              `json:"clusterId"`
+	ClusterName         string              `json:"clusterName"`
+	Status              string              `json:"status"`
+	ImageUrl            string              `json:"imageUrl"`
+	ProductId           string              `json:"productId"`
+	ProductName         string              `json:"productName"`
+	GpuNum              string              `json:"gpuNum"`
+	RootfsSize          int                 `json:"rootfsSize"`
+	PortMappings        []PortMapping       `json:"portMappings"`
+	SshCommand          string              `json:"sshCommand"`
+	Password            string              `json:"sshPassword"`
+	ConnectComponentSSH *ConnectComponentSSH `json:"connectComponentSSH"`
+	Network             *NetworkInfo        `json:"network"`
+	StatusError         *StatusError        `json:"statusError"`
+	CreatedAt           string              `json:"createdAt"`
+	LastStartedAt       string              `json:"lastStartedAt"`
+	BillingMode         string              `json:"billingMode"`
+	EndTime             string              `json:"endTime"`
 }
 
 // GetID 获取实例ID（兼容大小写）
@@ -295,16 +309,26 @@ func (c *Client) GetGPUInstance(ctx context.Context, instanceID string) (*GPUIns
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("[ppio] GetGPUInstance raw response for %s: %s", instanceID, string(respBody))
+
 	// PPIO 可能直接返回实例对象或包裹在 instance 字段中
 	var direct GPUInstance
-	if err := json.Unmarshal(respBody, &direct); err == nil && direct.GetID() != "" {
+	if err := json.Unmarshal(respBody, &direct); err != nil {
+		log.Printf("[ppio] Direct unmarshal error: %v", err)
+	} else if direct.GetID() != "" {
+		log.Printf("[ppio] Parsed direct GPUInstance: ID=%s, Status=%s, SshCommand=%s, Password=%s, PortMappings=%d",
+			direct.GetID(), direct.Status, direct.SshCommand, direct.Password, len(direct.PortMappings))
 		return &direct, nil
+	} else {
+		log.Printf("[ppio] Direct unmarshal ok but ID is empty")
 	}
 
 	var wrapped GetGPUInstanceResponse
 	if err := json.Unmarshal(respBody, &wrapped); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
+	log.Printf("[ppio] Parsed wrapped GPUInstance: ID=%s, Status=%s, SshCommand=%s, Password=%s, PortMappings=%d",
+		wrapped.Instance.GetID(), wrapped.Instance.Status, wrapped.Instance.SshCommand, wrapped.Instance.Password, len(wrapped.Instance.PortMappings))
 	return &wrapped.Instance, nil
 }
 
@@ -339,4 +363,82 @@ type DeleteGPUInstanceRequest struct {
 func (c *Client) DeleteGPUInstance(ctx context.Context, instanceID string) error {
 	_, err := c.doRequest(ctx, "POST", "/gpu/instance/delete", DeleteGPUInstanceRequest{InstanceID: instanceID})
 	return err
+}
+
+// ============================================================================
+// Metrics API (uses different base path: /openapi/v1/metrics/gpu/instance)
+// ============================================================================
+
+// metricsPoint PPIO metrics 响应中的单个数据点
+type metricsPoint struct {
+	Timestamp string  `json:"timestamp"`
+	Value     float64 `json:"value"`
+}
+
+// metricsSeries PPIO metrics 响应中的序列
+type metricsSeries struct {
+	Avg    []metricsPoint `json:"avg"`
+	GPUIds []struct {
+		GPUID string        `json:"gpuId"`
+		Items []metricsPoint `json:"items"`
+	} `json:"gpuIds"`
+}
+
+// GetInstanceMetricsResponse PPIO 实例监控响应
+type GetInstanceMetricsResponse struct {
+	CPUUtilization      []metricsPoint `json:"cpuUtilization"`
+	MemUtilization      []metricsPoint `json:"memUtilization"`
+	RootDiskUtilization []metricsPoint `json:"rootDiskUtilization"`
+	GPUUtilization      metricsSeries  `json:"gpuUtilization"`
+	GPUMemUtilization   metricsSeries  `json:"gpuMemUtilization"`
+}
+
+// GetInstanceMetrics 查询实例监控指标
+// PPIO metrics endpoint: https://api.ppio.com/openapi/v1/metrics/gpu/instance
+func (c *Client) GetInstanceMetrics(ctx context.Context, instanceID string, startTime, endTime, interval int64) (*GetInstanceMetricsResponse, error) {
+	q := url.Values{}
+	q.Set("instanceId", instanceID)
+	if startTime > 0 {
+		q.Set("startTime", fmt.Sprintf("%d", startTime))
+	}
+	if endTime > 0 {
+		q.Set("endTime", fmt.Sprintf("%d", endTime))
+	}
+	if interval > 0 {
+		q.Set("interval", fmt.Sprintf("%d", interval))
+	}
+
+	// metrics API 使用不同的 base path
+	metricsURL := "https://api.ppio.com/openapi/v1/metrics/gpu/instance?" + q.Encode()
+	req, err := http.NewRequestWithContext(ctx, "GET", metricsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create metrics request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("metrics request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read metrics response: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("metrics API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	log.Printf("[ppio] Metrics raw response for %s: %s", instanceID, string(respBody))
+
+	var result GetInstanceMetricsResponse
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal metrics response: %w", err)
+	}
+	log.Printf("[ppio] Metrics parsed for %s: cpu=%d, mem=%d, disk=%d, gpuAvg=%d, gpuMemAvg=%d",
+		instanceID, len(result.CPUUtilization), len(result.MemUtilization), len(result.RootDiskUtilization),
+		len(result.GPUUtilization.Avg), len(result.GPUMemUtilization.Avg))
+	return &result, nil
 }

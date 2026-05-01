@@ -4,12 +4,12 @@
     <aside class="sidebar" :class="{ 'collapsed': isSidebarCollapsed }">
       <div class="sidebar-header">
         <div class="logo">
-          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg v-if="!isSidebarCollapsed" class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2L2 7l10 5 10-5-10-5z"/>
             <path d="M2 17l10 5 10-5"/>
             <path d="M2 12l10 5 10-5"/>
           </svg>
-          <span v-if="!isSidebarCollapsed" class="logo-text">ML Platform</span>
+          <span v-if="!isSidebarCollapsed" class="logo-text">ModelRancher</span>
         </div>
         <button class="collapse-btn" @click="toggleSidebar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -132,6 +132,7 @@ const toggleSidebar = () => {
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  --shadow-sidebar: 4px 0 24px rgba(0, 0, 0, 0.12);
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
@@ -158,33 +159,44 @@ body {
 
 /* 侧边栏 */
 .sidebar {
-  width: 260px;
+  width: 200px;
   background: var(--bg-sidebar);
   color: var(--text-light);
   display: flex;
   flex-direction: column;
-  transition: width 0.3s ease;
-  position: fixed;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  position: sticky;
+  top: 0;
   height: 100vh;
+  flex-shrink: 0;
+  overflow: hidden;
   z-index: 100;
 }
 
 .sidebar.collapsed {
-  width: 72px;
+  width: 64px;
 }
 
 .sidebar-header {
-  padding: 20px;
+  padding: 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  min-height: 64px;
 }
 
 .logo {
   display: flex;
   align-items: center;
   gap: 12px;
+  overflow: hidden;
+  transition: opacity 0.25s;
+}
+
+.sidebar.collapsed .logo-text {
+  opacity: 0;
+  width: 0;
 }
 
 .logo-icon {
@@ -194,24 +206,29 @@ body {
 }
 
 .logo-text {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
 .collapse-btn {
-  background: none;
+  background: transparent;
   border: none;
   color: var(--text-light);
   cursor: pointer;
-  padding: 4px;
+  padding: 6px;
   border-radius: var(--radius-sm);
-  opacity: 0.7;
-  transition: opacity 0.2s;
+  opacity: 0.5;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .collapse-btn:hover {
-  opacity: 1;
+  opacity: 0.9;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .collapse-btn svg {
@@ -222,20 +239,26 @@ body {
 /* 导航 */
 .sidebar-nav {
   flex: 1;
-  padding: 16px 12px;
+  padding: 12px 8px;
   overflow-y: auto;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 10px;
+  padding: 10px 12px;
   color: rgba(255, 255, 255, 0.7);
   text-decoration: none;
   border-radius: var(--radius-md);
   margin-bottom: 4px;
   transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 10px 0;
 }
 
 .nav-item:hover {
@@ -270,7 +293,7 @@ body {
 
 /* 用户信息 */
 .sidebar-footer {
-  padding: 16px;
+  padding: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -309,14 +332,10 @@ body {
 /* 主内容区 */
 .main-content {
   flex: 1;
-  margin-left: 260px;
-  transition: margin-left 0.3s ease;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-}
-
-.sidebar.collapsed + .main-content {
-  margin-left: 72px;
+  background: var(--bg-primary);
 }
 
 /* 顶部栏 */
@@ -384,10 +403,6 @@ body {
   .nav-group-label,
   .user-info {
     display: none !important;
-  }
-
-  .main-content {
-    margin-left: 72px;
   }
 }
 </style>

@@ -571,8 +571,14 @@ func (p *Provider) GetInstance(ctx context.Context, instanceID string) (*provide
 	log.Printf("[ppio] GetGPUInstance success for %q: status=%s", instanceID, inst.Status)
 
 	// 解析 SSH 信息
-	sshHost, sshPort, sshUser := p.parseSSHInfo(inst)
+	sshHost, sshPort, sshUser, password := p.parseSSHInfo(inst)
 	status := mapPPIOStatus(inst.Status)
+
+	// 取实际可用的 sshCommand（优先 connectComponentSSH，回退根级别）
+	sshCommand := inst.SshCommand
+	if inst.ConnectComponentSSH != nil && inst.ConnectComponentSSH.SshCommand != "" {
+		sshCommand = inst.ConnectComponentSSH.SshCommand
+	}
 
 	p.instMu.Lock()
 	if local, ok := p.instances[instanceID]; ok {
@@ -583,34 +589,59 @@ func (p *Provider) GetInstance(ctx context.Context, instanceID string) (*provide
 	}
 	p.instMu.Unlock()
 
-	return &provider.InstanceInfo{
+	info := &provider.InstanceInfo{
 		InstanceID: instanceID,
 		SSHHost:    sshHost,
 		SSHPort:    sshPort,
 		SSHUser:    sshUser,
+		Password:   password,
+		SSHCommand: sshCommand,
 		Status:     status,
-	}, nil
+	}
+	log.Printf("[ppio] GetInstance returning: InstanceID=%s, Status=%s, SSHHost=%s, SSHPort=%d, SSHUser=%s, Password=%s, SSHCommand=%s",
+		info.InstanceID, info.Status, info.SSHHost, info.SSHPort, info.SSHUser, info.Password, info.SSHCommand)
+	return info, nil
 }
 
 // parseSSHInfo 从实例详情中解析SSH连接信息
-func (p *Provider) parseSSHInfo(inst *GPUInstance) (host string, port int, user string) {
+// 返回: host, port, user, password
+func (p *Provider) parseSSHInfo(inst *GPUInstance) (host string, port int, user string, password string) {
 	user = "root"
 	port = 22
 
-	// 1. 尝试从 sshCommand 解析，格式通常为 "ssh root@host -p port"
-	if inst.SshCommand != "" {
+	// 1. 优先从 connectComponentSSH 获取 sshCommand 和 password
+	var cmdStr string
+	if inst.ConnectComponentSSH != nil {
+		cmdStr = inst.ConnectComponentSSH.SshCommand
+		password = inst.ConnectComponentSSH.Password
+		if inst.ConnectComponentSSH.Username != "" {
+			user = inst.ConnectComponentSSH.Username
+		}
+	}
+
+	// 2. connectComponentSSH 为空时，回退到根级别字段
+	if cmdStr == "" {
+		cmdStr = inst.SshCommand
+	}
+	if password == "" {
+		password = inst.Password
+	}
+
+	// 3. 从 sshCommand 解析 host/port/user
+	if cmdStr != "" {
 		re := regexp.MustCompile(`ssh\s+(\w+)@([^\s]+)(?:\s+-p\s+(\d+))?`)
-		if matches := re.FindStringSubmatch(inst.SshCommand); len(matches) >= 3 {
+		if matches := re.FindStringSubmatch(cmdStr); len(matches) >= 3 {
 			user = matches[1]
 			host = matches[2]
 			if len(matches) >= 4 && matches[3] != "" {
 				port, _ = strconv.Atoi(matches[3])
 			}
+			// sshCommand 解析成功时直接返回，不再 fallback
 			return
 		}
 	}
 
-	// 2. 尝试从 portMappings 中找 SSH 端口（22）
+	// 4. sshCommand 为空时，尝试从 portMappings 中找 SSH 端口
 	for _, pm := range inst.PortMappings {
 		if pm.Type == "tcp" && (pm.Port == 22 || pm.Port == 2222) {
 			port = pm.Port
@@ -621,11 +652,64 @@ func (p *Provider) parseSSHInfo(inst *GPUInstance) (host string, port int, user 
 		}
 	}
 
-	// 3. 尝试从 network.ip 获取
+	// 5. 尝试从 network.ip 获取
 	if inst.Network != nil && inst.Network.IP != "" {
 		host = inst.Network.IP
-		return
 	}
 
 	return
+}
+
+// GetInstanceMetrics 获取实例监控指标
+func (p *Provider) GetInstanceMetrics(ctx context.Context, instanceID string, startTime, endTime int64) (*provider.InstanceMetrics, error) {
+	resp, err := p.client.GetInstanceMetrics(ctx, instanceID, startTime, endTime, 15)
+	if err != nil {
+		return nil, err
+	}
+
+	parseTimestamp := func(ts string) int64 {
+		if t, err := time.Parse(time.RFC3339, ts); err == nil {
+			return t.Unix()
+		}
+		if sec, err := strconv.ParseInt(ts, 10, 64); err == nil {
+			return sec
+		}
+		return 0
+	}
+
+	convertPoints := func(src []metricsPoint) []provider.MetricPoint {
+		dst := make([]provider.MetricPoint, 0, len(src))
+		for _, pt := range src {
+			dst = append(dst, provider.MetricPoint{
+				Timestamp: parseTimestamp(pt.Timestamp),
+				Value:     float64(pt.Value),
+			})
+		}
+		return dst
+	}
+
+	convertGPUSeries := func(src metricsSeries) ([]provider.MetricPoint, []provider.GPUInstanceMetrics) {
+		avg := convertPoints(src.Avg)
+		gpus := make([]provider.GPUInstanceMetrics, 0, len(src.GPUIds))
+		for _, g := range src.GPUIds {
+			gpus = append(gpus, provider.GPUInstanceMetrics{
+				GPUID: g.GPUID,
+				Items: convertPoints(g.Items),
+			})
+		}
+		return avg, gpus
+	}
+
+	gpuUtilAvg, gpuUtil := convertGPUSeries(resp.GPUUtilization)
+	gpuMemAvg, gpuMem := convertGPUSeries(resp.GPUMemUtilization)
+
+	return &provider.InstanceMetrics{
+		CPUUtilization:       convertPoints(resp.CPUUtilization),
+		MemUtilization:       convertPoints(resp.MemUtilization),
+		RootDiskUtilization:  convertPoints(resp.RootDiskUtilization),
+		GPUUtilizationAvg:    gpuUtilAvg,
+		GPUUtilization:       gpuUtil,
+		GPUMemUtilizationAvg: gpuMemAvg,
+		GPUMemUtilization:    gpuMem,
+	}, nil
 }

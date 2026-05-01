@@ -214,16 +214,29 @@ func (c *Client) CreateInstance(ctx context.Context, offerID int64, req CreateIn
 
 // Instance 实例信息
 type Instance struct {
-	ID             int64  `json:"id"`
-	Label          string `json:"label"`
-	Status         string `json:"status"`
-	ActualStatus   string `json:"actual_status"`
-	SSHHost        string `json:"ssh_host"`
-	SSHPort        int    `json:"ssh_port"`
-	InternalIP     string `json:"internal_ip"`
-	PublicHostaddr string `json:"public_hostaddr"`
-	MachineID      int    `json:"machine_id"`
-	Image          string `json:"image"`
+	ID             int64   `json:"id"`
+	Label          string  `json:"label"`
+	Status         string  `json:"status"`
+	ActualStatus   string  `json:"actual_status"`
+	SSHHost        string  `json:"ssh_host"`
+	SSHPort        int     `json:"ssh_port"`
+	InternalIP     string  `json:"internal_ip"`
+	PublicHostaddr string  `json:"public_hostaddr"`
+	MachineID      int     `json:"machine_id"`
+	Image          string  `json:"image"`
+	// Metrics fields (current snapshot from Vast.ai)
+	CPUUtil      float64 `json:"cpu_util"`
+	MemUsage     float64 `json:"mem_usage"`
+	MemLimit     float64 `json:"mem_limit"`
+	VMemUsage    float64 `json:"vmem_usage"`
+	GPUUtil      float64 `json:"gpu_util"`
+	GPUTemp      float64 `json:"gpu_temp"`
+	GPURam       int     `json:"gpu_ram"`
+	GPUTotalRam  int     `json:"gpu_totalram"`
+	DiskUtil     float64 `json:"disk_util"`
+	DiskUsage    float64 `json:"disk_usage"`
+	DiskSpace    float64 `json:"disk_space"`
+	DiskBW       float64 `json:"disk_bw"`
 }
 
 // ShowInstancesResponse 显示实例响应
@@ -281,6 +294,11 @@ func (c *Client) StopInstance(ctx context.Context, instanceID int64) error {
 	body := map[string]string{"target_state": "stopped"}
 	_, err := c.doRequest(ctx, "PUT", fmt.Sprintf("/instances/%d/", instanceID), body)
 	return err
+}
+
+// GetInstanceMetrics 获取实例当前指标快照（Vast.ai 没有时序 API，返回单点数据）
+func (c *Client) GetInstanceMetrics(ctx context.Context, instanceID int64) (*Instance, error) {
+	return c.GetInstance(ctx, instanceID)
 }
 
 // RebootInstance 重启实例
