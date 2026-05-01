@@ -331,9 +331,10 @@ const handleSubmit = async () => {
 }
 
 .page-title {
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.03em;
   margin-bottom: 4px;
 }
 
@@ -383,7 +384,7 @@ const handleSubmit = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 14px;
   color: var(--text-secondary);
   transition: all 0.3s;
@@ -433,7 +434,7 @@ const handleSubmit = async () => {
 
 .step-title {
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 8px;
 }
@@ -501,7 +502,7 @@ const handleSubmit = async () => {
 
 .image-name {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   display: block;
   margin-bottom: 2px;

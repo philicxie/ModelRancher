@@ -218,9 +218,10 @@ const handleCancel = async (id) => {
 }
 
 .page-title {
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.03em;
   margin-bottom: 4px;
 }
 
@@ -300,7 +301,7 @@ const handleCancel = async (id) => {
 
 .empty-state h3 {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 8px;
 }
@@ -411,7 +412,7 @@ const handleCancel = async (id) => {
 
 .task-name {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 8px;
 }
@@ -458,7 +459,7 @@ const handleCancel = async (id) => {
 
 .progress-bar {
   height: 4px;
-  background: #e2e8f0;
+  background: var(--border-color);
   border-radius: 2px;
   overflow: hidden;
   margin-bottom: 8px;
@@ -466,7 +467,7 @@ const handleCancel = async (id) => {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #4f46e5, #06b6d4);
+  background: linear-gradient(90deg, #2563eb, #06b6d4);
   border-radius: 2px;
   transition: width 0.3s;
 }

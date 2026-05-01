@@ -117,9 +117,10 @@ const handleDelete = (row) => {
 }
 
 .page-title {
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.03em;
   margin-bottom: 4px;
 }
 

@@ -203,8 +203,9 @@ onUnmounted(() => {
 
 .page-title {
   font-size: 28px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.03em;
   margin-bottom: 6px;
 }
 
@@ -235,13 +236,17 @@ onUnmounted(() => {
   border-radius: var(--radius-lg);
   padding: 16px;
   border: 2px solid var(--border-color);
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.instance-card.status-running { border-color: #10b981; }
-.instance-card.status-starting { border-color: #f59e0b; }
+.instance-card:hover {
+  box-shadow: 0 8px 24px -8px rgba(15, 23, 42, 0.1);
+}
+
+.instance-card.status-running { border-color: #10b981; box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.08); }
+.instance-card.status-starting { border-color: #f59e0b; box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.08); }
 .instance-card.status-destroying { border-color: #ef4444; opacity: 0.7; }
-.instance-card.status-error { border-color: #ef4444; }
+.instance-card.status-error { border-color: #ef4444; box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.08); }
 
 .card-header {
   display: flex;
@@ -257,9 +262,10 @@ onUnmounted(() => {
 }
 
 .instance-name {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   font-size: 15px;
+  letter-spacing: -0.01em;
 }
 
 .instance-id {

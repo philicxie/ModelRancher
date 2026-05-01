@@ -240,11 +240,11 @@ function refreshMetrics() {
 function renderCharts() {
   if (!metrics.value) return
 
-  renderLineChart(cpuChart.value, 'CPU 利用率', metrics.value.cpu_utilization, '#409eff')
-  renderLineChart(memChart.value, '内存利用率', metrics.value.mem_utilization, '#67c23a')
-  renderLineChart(gpuChart.value, 'GPU 利用率', metrics.value.gpu_utilization_avg, '#e6a23c')
-  renderLineChart(gpuMemChart.value, 'GPU 显存', metrics.value.gpu_mem_utilization_avg, '#f56c6c')
-  renderLineChart(diskChart.value, '磁盘利用率', metrics.value.root_disk_utilization, '#909399')
+  renderLineChart(cpuChart.value, 'CPU 利用率', metrics.value.cpu_utilization, '#2563eb')
+  renderLineChart(memChart.value, '内存利用率', metrics.value.mem_utilization, '#10b981')
+  renderLineChart(gpuChart.value, 'GPU 利用率', metrics.value.gpu_utilization_avg, '#f59e0b')
+  renderLineChart(gpuMemChart.value, 'GPU 显存', metrics.value.gpu_mem_utilization_avg, '#ef4444')
+  renderLineChart(diskChart.value, '磁盘利用率', metrics.value.root_disk_utilization, '#64748b')
 }
 
 function renderLineChart(el, title, data, color) {
@@ -266,7 +266,7 @@ function renderLineChart(el, title, data, color) {
 
   if (!hasData) {
     chart.setOption({
-      title: { text: '暂无数据', left: 'center', top: 'center', textStyle: { color: '#909399', fontSize: 14 } },
+      title: { text: '暂无数据', left: 'center', top: 'center', textStyle: { color: '#94a3b8', fontSize: 14 } },
       xAxis: { show: false },
       yAxis: { show: false },
       series: []
@@ -288,8 +288,8 @@ function renderLineChart(el, title, data, color) {
     xAxis: {
       type: 'category',
       data: xData,
-      axisLine: { lineStyle: { color: '#e4e7ed' } },
-      axisLabel: { color: '#909399', fontSize: 10 },
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      axisLabel: { color: '#94a3b8', fontSize: 10 },
       axisTick: { show: false }
     },
     yAxis: {
@@ -298,8 +298,8 @@ function renderLineChart(el, title, data, color) {
       max: 100,
       axisLine: { show: false },
       axisTick: { show: false },
-      splitLine: { lineStyle: { color: '#f0f2f5' } },
-      axisLabel: { color: '#909399', fontSize: 10, formatter: '{value}%' }
+      splitLine: { lineStyle: { color: '#f1f5f9' } },
+      axisLabel: { color: '#94a3b8', fontSize: 10, formatter: '{value}%' }
     },
     series: [{
       name: title,
@@ -415,9 +415,10 @@ onUnmounted(() => {
 }
 
 .page-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: #1a1a2e;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
@@ -436,8 +437,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 600;
-  color: #1a1a2e;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .info-grid {
@@ -454,24 +455,24 @@ onUnmounted(() => {
 
 .info-label {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
 }
 
 .info-value {
   font-size: 14px;
   font-weight: 500;
-  color: #1a1a2e;
+  color: var(--text-primary);
 }
 
 .info-value.price {
-  color: #e6a23c;
-  font-weight: 600;
+  color: #d97706;
+  font-weight: 700;
 }
 
 .ssh-section {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #e4e7ed;
+  border-top: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -480,17 +481,17 @@ onUnmounted(() => {
 
 .ssh-label {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
 .ssh-cmd {
-  background: #f5f7fa;
+  background: #f1f5f9;
   padding: 6px 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   font-family: monospace;
   font-size: 13px;
-  color: #606266;
+  color: #475569;
 }
 
 .metrics-section {
@@ -506,8 +507,8 @@ onUnmounted(() => {
 
 .section-title {
   font-size: 18px;
-  font-weight: 600;
-  color: #1a1a2e;
+  font-weight: 700;
+  color: var(--text-primary);
   margin: 0;
   display: flex;
   align-items: center;
@@ -541,12 +542,12 @@ onUnmounted(() => {
 .metric-title {
   font-size: 14px;
   font-weight: 500;
-  color: #606266;
+  color: #64748b;
 }
 
 .metric-value {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .metric-value.normal {

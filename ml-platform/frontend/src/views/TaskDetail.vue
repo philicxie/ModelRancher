@@ -397,9 +397,10 @@ const handleCancel = async () => {
 }
 
 .page-title {
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.03em;
   margin: 0;
 }
 
@@ -484,7 +485,7 @@ const handleCancel = async () => {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
 }
 
@@ -543,7 +544,7 @@ const handleCancel = async () => {
 }
 
 .image-name {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
 }
 
@@ -649,7 +650,7 @@ const handleCancel = async () => {
   padding: 0 6px;
   border-radius: 3px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .log-level.info {
@@ -712,7 +713,7 @@ const handleCancel = async () => {
 
 .empty-state h3 {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 8px;
 }

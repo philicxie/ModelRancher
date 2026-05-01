@@ -3,20 +3,21 @@
     <!-- 侧边栏 -->
     <aside class="sidebar" :class="{ 'collapsed': isSidebarCollapsed }">
       <div class="sidebar-header">
-        <div class="logo">
-          <svg v-if="!isSidebarCollapsed" class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-            <path d="M2 17l10 5 10-5"/>
-            <path d="M2 12l10 5 10-5"/>
-          </svg>
-          <span v-if="!isSidebarCollapsed" class="logo-text">ModelRancher</span>
+        <div class="logo" >
+          <div class="logo-icon-wrap" @click="toggleSidebar">
+            <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+              <path d="M2 17l10 5 10-5"/>
+              <path d="M2 12l10 5 10-5"/>
+            </svg>
+            <svg class="logo-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path v-if="isSidebarCollapsed" d="M9 18l6-6-6-6"/>
+              <path v-else d="M15 18l-6-6 6-6"/>
+            </svg>
+          </div>
+          
         </div>
-        <button class="collapse-btn" @click="toggleSidebar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path v-if="isSidebarCollapsed" d="M9 18l6-6-6-6"/>
-            <path v-else d="M15 18l-6-6 6-6"/>
-          </svg>
-        </button>
+        <span class="logo-text">ModelRancher</span>
       </div>
 
       <nav class="sidebar-nav">
@@ -27,7 +28,7 @@
             <rect x="14" y="14" width="7" height="7"/>
             <rect x="3" y="14" width="7" height="7"/>
           </svg>
-          <span v-if="!isSidebarCollapsed">Dashboard</span>
+          <span class="nav-text">Dashboard</span>
         </router-link>
 
         <router-link to="/tasks" class="nav-item" :class="{ 'active': route.path === '/tasks' }">
@@ -37,7 +38,7 @@
             <line x1="16" y1="13" x2="8" y2="13"/>
             <line x1="16" y1="17" x2="8" y2="17"/>
           </svg>
-          <span v-if="!isSidebarCollapsed">训练任务</span>
+          <span class="nav-text">训练任务</span>
         </router-link>
 
         <router-link to="/create" class="nav-item" :class="{ 'active': route.path === '/create' }">
@@ -46,7 +47,7 @@
             <line x1="12" y1="8" x2="12" y2="16"/>
             <line x1="8" y1="12" x2="16" y2="12"/>
           </svg>
-          <span v-if="!isSidebarCollapsed">创建任务</span>
+          <span class="nav-text">创建任务</span>
         </router-link>
 
         <div class="nav-divider"></div>
@@ -56,7 +57,7 @@
             <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
             <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
           </svg>
-          <span v-if="!isSidebarCollapsed">实例管理</span>
+          <span class="nav-text">实例管理</span>
         </router-link>
         <router-link to="/browse" class="nav-item" :class="{ 'active': route.path === '/browse' }">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -64,7 +65,7 @@
             <polyline points="2 17 12 22 22 17"/>
             <polyline points="2 12 12 17 22 12"/>
           </svg>
-          <span v-if="!isSidebarCollapsed">算力市场</span>
+          <span class="nav-text">算力市场</span>
         </router-link>
 
         <div class="nav-divider"></div>
@@ -73,7 +74,7 @@
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
           </svg>
-          <span v-if="!isSidebarCollapsed">对象存储</span>
+          <span class="nav-text">对象存储</span>
         </router-link>
 
         <router-link to="/images" class="nav-item" :class="{ 'active': route.path === '/images' }">
@@ -82,12 +83,12 @@
             <circle cx="8.5" cy="8.5" r="1.5"/>
             <polyline points="21 15 16 10 5 21"/>
           </svg>
-          <span v-if="!isSidebarCollapsed">镜像管理</span>
+          <span class="nav-text">镜像管理</span>
         </router-link>
       </nav>
 
       <div class="sidebar-footer">
-        <div class="user-info" v-if="!isSidebarCollapsed">
+        <div class="user-info">
           <div class="user-avatar">U</div>
           <div class="user-details">
             <div class="user-name">User</div>
@@ -122,26 +123,43 @@ const toggleSidebar = () => {
 <style>
 /* CSS变量 - 全局主题 */
 :root {
-  --primary-color: #4f46e5;
-  --primary-hover: #4338ca;
+  /* 主色调 - 深蓝渐变系 */
+  --primary-color: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-light: #dbeafe;
+
+  /* 强调色 - Sky/Cyan */
+  --accent-sky: #38bdf8;
+  --accent-cyan: #22d3ee;
+
+  /* 辅助色 */
   --secondary-color: #06b6d4;
   --success-color: #10b981;
   --warning-color: #f59e0b;
   --danger-color: #ef4444;
-  --bg-primary: #f8fafc;
+
+  /* 背景色 */
+  --bg-primary: #faf8f5;
   --bg-secondary: #ffffff;
-  --bg-sidebar: #1e293b;
+  --bg-sidebar: #0f172a;
+
+  /* 文字颜色 */
   --text-primary: #1e293b;
   --text-secondary: #64748b;
   --text-light: #f8fafc;
+
+  /* 边框和阴影 */
   --border-color: #e2e8f0;
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
   --shadow-sidebar: 4px 0 24px rgba(0, 0, 0, 0.12);
+
+  /* 圆角 */
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
+  --radius-full: 9999px;
 }
 
 * {
@@ -150,23 +168,31 @@ const toggleSidebar = () => {
   box-sizing: border-box;
 }
 
+html, body {
+  overflow-x: hidden;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Space Grotesk', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
   line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* 应用容器 */
 .app-container {
   display: flex;
   min-height: 100vh;
+  overflow: hidden;
 }
 
 /* 侧边栏 */
 .sidebar {
-  width: 200px;
+  width: 175px;
   background: var(--bg-sidebar);
+  background-image: linear-gradient(180deg, #0f172a 0%, #111827 50%, #0f172a 100%);
   color: var(--text-light);
   display: flex;
   flex-direction: column;
@@ -195,20 +221,86 @@ body {
 .logo {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   overflow: hidden;
-  transition: opacity 0.25s;
+  cursor: pointer;
+  padding: 6px 8px;
+  margin: -6px -8px;
+  border-radius: var(--radius-md);
+  transition: background 0.2s;
+}
+
+.logo:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.logo-icon-wrap {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.logo-icon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 24px;
+  color: var(--accent-sky);
+  opacity: 1;
+  transition: opacity 0.15s ease;
+}
+
+.logo-arrow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.logo:hover .logo-icon {
+  opacity: 0;
+}
+
+.logo:hover .logo-arrow {
+  opacity: 1;
 }
 
 .sidebar.collapsed .logo-text {
+  max-width: 0;
   opacity: 0;
-  width: 0;
+}
+
+.logo-text,
+.nav-text,
+.user-details,
+.nav-group-label {
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 200px;
+  opacity: 1;
+  transition: max-width 0.25s ease 0.15s, opacity 0.2s ease 0.2s;
+}
+
+.sidebar.collapsed .logo-text,
+.sidebar.collapsed .nav-text,
+.sidebar.collapsed .user-details,
+.sidebar.collapsed .nav-group-label {
+  max-width: 0;
+  opacity: 0;
+  transition: max-width 0.12s ease, opacity 0.08s ease;
 }
 
 .logo-icon {
   width: 32px;
   height: 32px;
-  color: var(--primary-color);
+  color: var(--accent-sky);
 }
 
 .logo-text {
@@ -218,35 +310,12 @@ body {
   white-space: nowrap;
 }
 
-.collapse-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-light);
-  cursor: pointer;
-  padding: 6px;
-  border-radius: var(--radius-sm);
-  opacity: 0.5;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.collapse-btn:hover {
-  opacity: 0.9;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.collapse-btn svg {
-  width: 20px;
-  height: 20px;
-}
-
 /* 导航 */
 .sidebar-nav {
   flex: 1;
   padding: 12px 8px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .nav-item {
@@ -258,23 +327,26 @@ body {
   text-decoration: none;
   border-radius: var(--radius-md);
   margin-bottom: 4px;
-  transition: all 0.2s;
+  transition: all 0.25s ease;
   white-space: nowrap;
 }
 
 .sidebar.collapsed .nav-item {
   justify-content: center;
   padding: 10px 0;
+  gap: 0;
 }
 
 .nav-item:hover {
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-light);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.12);
 }
 
 .nav-item.active {
-  background: var(--primary-color);
+  background: linear-gradient(135deg, #2563eb 0%, #06b6d4 100%);
   color: var(--text-light);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
 }
 
 .nav-icon {
@@ -293,6 +365,7 @@ body {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  font-weight: 600;
   color: rgba(255, 255, 255, 0.4);
   padding: 8px 16px;
 }
@@ -303,17 +376,27 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.sidebar.collapsed .sidebar-footer {
+  padding: 12px 0;
+  display: flex;
+  justify-content: center;
+}
+
 .user-info {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
+.sidebar.collapsed .user-info {
+  justify-content: center;
+}
+
 .user-avatar {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: var(--primary-color);
+  background: linear-gradient(135deg, #2563eb, #06b6d4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -405,9 +488,8 @@ body {
   }
 
   .logo-text,
-  .nav-item span,
-  .nav-group-label,
-  .user-info {
+  .nav-text,
+  .nav-group-label {
     display: none !important;
   }
 }

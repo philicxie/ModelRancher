@@ -248,10 +248,11 @@ const handleCancel = async (id) => {
 }
 
 .page-title {
-  font-size: 28px;
-  font-weight: 600;
+  font-size: 32px;
+  font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 8px;
+  letter-spacing: -0.03em;
 }
 
 .page-subtitle {
@@ -282,12 +283,13 @@ const handleCancel = async (id) => {
   gap: 20px;
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-color);
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px -8px rgba(15, 23, 42, 0.12);
+  border-color: rgba(56, 189, 248, 0.25);
 }
 
 .stat-icon {
@@ -305,23 +307,23 @@ const handleCancel = async (id) => {
 }
 
 .bg-blue {
-  background: #eff6ff;
-  color: #3b82f6;
+  background: linear-gradient(135deg, #eff6ff, #dbeafe);
+  color: #2563eb;
 }
 
 .bg-green {
-  background: #ecfdf5;
-  color: #10b981;
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+  color: #059669;
 }
 
 .bg-yellow {
-  background: #fffbeb;
-  color: #f59e0b;
+  background: linear-gradient(135deg, #fffbeb, #fef3c7);
+  color: #d97706;
 }
 
 .bg-red {
-  background: #fef2f2;
-  color: #ef4444;
+  background: linear-gradient(135deg, #fef2f2, #fee2e2);
+  color: #dc2626;
 }
 
 .stat-content {
@@ -333,6 +335,7 @@ const handleCancel = async (id) => {
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 
 .stat-label {
@@ -348,9 +351,10 @@ const handleCancel = async (id) => {
 
 .section-title {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 16px;
+  letter-spacing: -0.02em;
 }
 
 .section-header {
@@ -385,23 +389,24 @@ const handleCancel = async (id) => {
   gap: 16px;
   border: 1px solid var(--border-color);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .action-card:hover {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  border-color: rgba(56, 189, 248, 0.3);
+  box-shadow: 0 8px 20px -6px rgba(15, 23, 42, 0.1);
+  transform: translateY(-2px);
 }
 
 .action-icon {
   width: 48px;
   height: 48px;
   border-radius: var(--radius-md);
-  background: var(--bg-primary);
+  background: linear-gradient(135deg, #eff6ff, #dbeafe);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--primary-color);
+  color: #2563eb;
 }
 
 .action-icon svg {
@@ -428,6 +433,11 @@ const handleCancel = async (id) => {
   padding: 24px;
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-color);
+  transition: box-shadow 0.3s ease;
+}
+
+.recent-tasks:hover {
+  box-shadow: 0 8px 24px -8px rgba(15, 23, 42, 0.08);
 }
 
 .tasks-table-wrapper {

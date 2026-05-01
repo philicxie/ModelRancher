@@ -334,8 +334,9 @@ onMounted(() => {
 
 .page-title {
   font-size: 28px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.03em;
   margin-bottom: 6px;
 }
 
@@ -400,11 +401,13 @@ onMounted(() => {
   border-radius: var(--radius-lg);
   padding: 16px;
   border: 1px solid var(--border-color);
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .available-card:hover {
-  border-color: var(--primary-color);
+  border-color: rgba(56, 189, 248, 0.35);
+  box-shadow: 0 8px 24px -8px rgba(15, 23, 42, 0.1);
+  transform: translateY(-2px);
 }
 
 .available-card .card-header {
@@ -436,7 +439,7 @@ onMounted(() => {
 }
 
 .price-block .currency { font-size: 12px; color: var(--text-secondary); }
-.price-block .price { font-size: 22px; font-weight: 700; color: var(--primary-color); }
+.price-block .price { font-size: 22px; font-weight: 700; color: #2563eb; letter-spacing: -0.02em; }
 .price-block .unit { font-size: 12px; color: var(--text-secondary); }
 
 .gpu-block {
@@ -449,7 +452,7 @@ onMounted(() => {
   border-bottom: 1px solid var(--border-color);
 }
 
-.gpu-name { font-weight: 600; color: var(--text-primary); font-size: 15px; }
+.gpu-name { font-weight: 700; color: var(--text-primary); font-size: 15px; letter-spacing: -0.01em; }
 .gpu-count { font-size: 14px; color: var(--text-secondary); }
 
 .spec-row {

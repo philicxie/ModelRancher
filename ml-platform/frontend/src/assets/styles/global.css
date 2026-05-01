@@ -1,11 +1,15 @@
 /* 全局样式重置和基础配置 */
 
-/* CSS变量 - 全局主题色 */
+/* CSS变量 - 全局主题色 (Whaletech AI 风格) */
 :root {
-  /* 主色调 */
-  --primary-color: #4f46e5;
-  --primary-hover: #4338ca;
-  --primary-light: #e0e7ff;
+  /* 主色调 - 深蓝渐变系 */
+  --primary-color: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-light: #dbeafe;
+
+  /* 强调色 - Sky/Cyan */
+  --accent-sky: #38bdf8;
+  --accent-cyan: #22d3ee;
 
   /* 辅助色 */
   --secondary-color: #06b6d4;
@@ -14,9 +18,9 @@
   --danger-color: #ef4444;
 
   /* 背景色 */
-  --bg-primary: #f8fafc;
+  --bg-primary: #faf8f5;
   --bg-secondary: #ffffff;
-  --bg-sidebar: #1e293b;
+  --bg-sidebar: #0f172a;
 
   /* 文字颜色 */
   --text-primary: #1e293b;
@@ -28,6 +32,7 @@
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  --shadow-sidebar: 4px 0 24px rgba(0, 0, 0, 0.12);
 
   /* 圆角 */
   --radius-sm: 6px;
@@ -45,9 +50,9 @@
   box-sizing: border-box;
 }
 
-/* 基础字体 */
+/* 基础字体 - Space Grotesk + Noto Sans SC */
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Space Grotesk', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
   line-height: 1.6;
@@ -99,12 +104,18 @@ a:hover {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.3s ease;
+}
+
+.el-card:hover {
+  box-shadow: 0 8px 24px -8px rgba(15, 23, 42, 0.08);
 }
 
 .el-card__header {
   border-bottom: 1px solid var(--border-color);
   padding: 16px 20px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 /* 按钮样式 */
@@ -122,6 +133,7 @@ a:hover {
 .el-button--primary:hover {
   background-color: var(--primary-hover);
   border-color: var(--primary-hover);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
 }
 
 /* 输入框样式 */
@@ -157,10 +169,10 @@ a:hover {
 .el-table th.el-table__cell {
   background: var(--bg-primary);
   color: var(--text-secondary);
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  font-size: 12px;
-  letter-spacing: 0.05em;
+  font-size: 11px;
+  letter-spacing: 0.08em;
 }
 
 /* 标签样式 */

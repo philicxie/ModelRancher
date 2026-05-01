@@ -161,9 +161,10 @@ const getSelectedImageInfo = () => {
 }
 
 .page-title {
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.03em;
   margin-bottom: 4px;
 }
 
@@ -251,7 +252,7 @@ const getSelectedImageInfo = () => {
 
 .image-name {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 4px;
 }
@@ -313,7 +314,7 @@ const getSelectedImageInfo = () => {
 
 .detail-name {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 4px;
 }
