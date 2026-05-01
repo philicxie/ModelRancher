@@ -51,18 +51,24 @@
 
         <div class="nav-divider"></div>
 
-        <div class="nav-group-label" v-if="!isSidebarCollapsed">资源</div>
-        <router-link to="/instances" class="nav-item" :class="{ 'active': route.path === '/instances' }">
+        <router-link to="/my-instances" class="nav-item" :class="{ 'active': route.path === '/my-instances' }">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
             <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
           </svg>
           <span v-if="!isSidebarCollapsed">实例管理</span>
         </router-link>
+        <router-link to="/browse" class="nav-item" :class="{ 'active': route.path === '/browse' }">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+            <polyline points="2 17 12 22 22 17"/>
+            <polyline points="2 12 12 17 22 12"/>
+          </svg>
+          <span v-if="!isSidebarCollapsed">算力市场</span>
+        </router-link>
 
         <div class="nav-divider"></div>
 
-        <div class="nav-group-label" v-if="!isSidebarCollapsed">存储</div>
         <router-link to="/storage" class="nav-item" :class="{ 'active': route.path === '/storage' }">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>

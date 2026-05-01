@@ -5,7 +5,8 @@ import TaskCreate from '../views/TaskCreate.vue'
 import TaskDetail from '../views/TaskDetail.vue'
 import Storage from '../views/Storage.vue'
 import Images from '../views/Images.vue'
-import Instances from '../views/Instances.vue'
+import MyInstances from '../views/MyInstances.vue'
+import BrowseInstances from '../views/BrowseInstances.vue'
 import InstanceDetail from '../views/InstanceDetail.vue'
 
 const routes = [
@@ -15,7 +16,9 @@ const routes = [
   { path: '/task/:id', name: 'TaskDetail', component: TaskDetail, props: true },
   { path: '/storage', name: 'Storage', component: Storage },
   { path: '/images', name: 'Images', component: Images },
-  { path: '/instances', name: 'Instances', component: Instances },
+  { path: '/my-instances', name: 'MyInstances', component: MyInstances },
+  { path: '/browse', name: 'BrowseInstances', component: BrowseInstances },
+  { path: '/instances', redirect: '/my-instances' },
   { path: '/instance/:id', name: 'InstanceDetail', component: InstanceDetail, props: true }
 ]
 
