@@ -45,6 +45,13 @@ type Instance struct {
 	ErrorMsg       string         `json:"error_msg" gorm:"type:text"`
 }
 
+// WorkOrder 历史工单（实例租赁记录）
+type WorkOrder struct {
+	Instance
+	DurationHours float64 `json:"duration_hours"`
+	TotalCost     float64 `json:"total_cost"`
+}
+
 // CreateOfferRequest 创建租赁请求
 type CreateOfferRequest struct {
 	Provider      string  `json:"provider" binding:"required"`

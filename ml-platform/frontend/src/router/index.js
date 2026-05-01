@@ -8,6 +8,7 @@ import Images from '../views/Images.vue'
 import MyInstances from '../views/MyInstances.vue'
 import BrowseInstances from '../views/BrowseInstances.vue'
 import InstanceDetail from '../views/InstanceDetail.vue'
+import WorkOrders from '../views/WorkOrders.vue'
 
 const routes = [
   { path: '/', name: 'Dashboard', component: Dashboard },
@@ -19,7 +20,8 @@ const routes = [
   { path: '/my-instances', name: 'MyInstances', component: MyInstances },
   { path: '/browse', name: 'BrowseInstances', component: BrowseInstances },
   { path: '/instances', redirect: '/my-instances' },
-  { path: '/instance/:id', name: 'InstanceDetail', component: InstanceDetail, props: true }
+  { path: '/instance/:id', name: 'InstanceDetail', component: InstanceDetail, props: true },
+  { path: '/work-orders', name: 'WorkOrders', component: WorkOrders }
 ]
 
 export default createRouter({

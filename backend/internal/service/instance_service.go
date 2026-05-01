@@ -430,6 +430,58 @@ func (s *InstanceService) ListUserInstances(ctx context.Context, userID string) 
 	return instances, nil
 }
 
+// ListWorkOrders 列出历史工单（含总开销计算）
+func (s *InstanceService) ListWorkOrders(ctx context.Context, userID string) ([]*model.WorkOrder, error) {
+	instances, err := s.repo.ListByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	orders := make([]*model.WorkOrder, 0, len(instances))
+	now := time.Now()
+
+	for _, inst := range instances {
+		order := &model.WorkOrder{
+			Instance: *inst,
+		}
+
+		// 计算运行时长和总开销
+		if inst.StartedAt != nil {
+			var endTime time.Time
+			switch inst.Status {
+			case model.InstanceStatusDestroyed:
+				if inst.DestroyedAt != nil {
+					endTime = *inst.DestroyedAt
+				} else if inst.StoppedAt != nil {
+					endTime = *inst.StoppedAt
+				} else {
+					endTime = now
+				}
+			case model.InstanceStatusStopped, model.InstanceStatusFailed:
+				if inst.StoppedAt != nil {
+					endTime = *inst.StoppedAt
+				} else {
+					endTime = now
+				}
+			default:
+				// running, starting, creating 等活跃状态
+				endTime = now
+			}
+
+			duration := endTime.Sub(*inst.StartedAt)
+			if duration < 0 {
+				duration = 0
+			}
+			order.DurationHours = duration.Hours()
+			order.TotalCost = order.DurationHours * inst.PricePerHour
+		}
+
+		orders = append(orders, order)
+	}
+
+	return orders, nil
+}
+
 // syncInstanceStatus 同步单个实例的 provider 端真实状态
 func (s *InstanceService) syncInstanceStatus(ctx context.Context, inst *model.Instance) {
 	log.Printf("[instance][SYNC] Start sync for %s (provider=%s, provider_inst_id=%s, status=%s)",

@@ -86,6 +86,12 @@ func NewServer(router *Router) *Server {
 		offers.DELETE("/:id", router.destroyOffer)
 	}
 
+	// 历史工单
+	workOrders := r.Group("/api/v1/work-orders")
+	{
+		workOrders.GET("", router.listWorkOrders)
+	}
+
 	return &Server{router: r}
 }
 
@@ -358,6 +364,25 @@ func (r *Router) destroyOffer(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Instance destroyed"})
+}
+
+// listWorkOrders 列出历史工单
+func (r *Router) listWorkOrders(c *gin.Context) {
+	userID := c.Query("user_id")
+	if userID == "" {
+		userID = "default"
+	}
+
+	orders, err := r.instanceService.ListWorkOrders(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"orders": orders,
+		"total":  len(orders),
+	})
 }
 
 var clientIDCounter int
