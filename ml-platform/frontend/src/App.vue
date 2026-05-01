@@ -17,7 +17,9 @@
           </div>
           
         </div>
-        <span class="logo-text">ModelRancher</span>
+        <span class="logo-text">
+          <TextDecode text="ModelRancher" :trigger="decodeTrigger" />
+        </span>
       </div>
 
       <nav class="sidebar-nav">
@@ -109,15 +111,21 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import TextDecode from './components/TextDecode.vue'
 
 const route = useRoute()
 const isSidebarCollapsed = ref(false)
+const decodeTrigger = ref(false)
 
 const toggleSidebar = () => {
   isSidebarCollapsed.value = !isSidebarCollapsed.value
 }
+
+watch(isSidebarCollapsed, (collapsed) => {
+  decodeTrigger.value = !collapsed
+}, { immediate: true })
 </script>
 
 <style>
@@ -190,7 +198,7 @@ body {
 
 /* 侧边栏 */
 .sidebar {
-  width: 175px;
+  width: 170px;
   background: var(--bg-sidebar);
   background-image: linear-gradient(180deg, #0f172a 0%, #111827 50%, #0f172a 100%);
   color: var(--text-light);
@@ -210,12 +218,17 @@ body {
 }
 
 .sidebar-header {
-  padding: 16px;
+  padding: 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   min-height: 64px;
+}
+
+.sidebar.collapsed .sidebar-header {
+  justify-content: center;
+  padding: 10px 0;
 }
 
 .logo {
@@ -224,21 +237,23 @@ body {
   gap: 8px;
   overflow: hidden;
   cursor: pointer;
-  padding: 6px 8px;
-  margin: -6px -8px;
   border-radius: var(--radius-md);
   transition: background 0.2s;
 }
 
-.logo:hover {
+.logo-icon-wrap:hover {
   background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
 }
 
 .logo-icon-wrap {
   position: relative;
-  width: 24px;
-  height: 24px;
+  width: 34px;
+  height: 34px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .logo-icon {
@@ -294,6 +309,7 @@ body {
 .sidebar.collapsed .nav-group-label {
   max-width: 0;
   opacity: 0;
+  min-width: 0;
   transition: max-width 0.12s ease, opacity 0.08s ease;
 }
 
