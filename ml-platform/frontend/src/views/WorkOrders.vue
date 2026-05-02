@@ -79,7 +79,7 @@
         class="orders-table"
         row-key="id"
       >
-        <el-table-column label="名称" min-width="140">
+        <el-table-column label="名称" width="160">
           <template #default="{ row }">
             <div class="order-name-cell">
               <span class="order-name">{{ row.name || '未命名实例' }}</span>
@@ -88,13 +88,13 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="提供商" width="90">
+        <el-table-column label="提供商" width="130">
           <template #default="{ row }">
             <span class="provider-tag" :class="row.provider">{{ row.provider }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="GPU配置" width="160">
+        <el-table-column label="GPU配置" width="200">
           <template #default="{ row }">
             <div class="gpu-config">
               <span class="gpu-name">{{ row.gpu_name || '-' }}</span>
@@ -103,7 +103,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="创建参数" min-width="180">
+        <el-table-column label="创建参数">
           <template #default="{ row }">
             <div class="params-cell">
               <div class="param-item">
@@ -118,7 +118,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="起止时间" min-width="200">
+        <el-table-column label="起止时间" width="155">
           <template #default="{ row }">
             <div class="time-cell">
               <div class="time-row">
@@ -133,19 +133,19 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="状态" width="100">
+        <el-table-column label="状态" width="150">
           <template #default="{ row }">
             <span class="status-badge" :class="row.status">{{ statusLabel(row.status) }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="运行时长" width="110">
+        <el-table-column label="运行时长" width="100">
           <template #default="{ row }">
             <span class="duration-text">{{ formatDuration(row.duration_hours) }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="总开销" width="110" align="right">
+        <el-table-column label="总开销" width="105" align="right">
           <template #default="{ row }">
             <span class="cost-value">${{ row.total_cost.toFixed(2) }}</span>
           </template>
@@ -394,6 +394,8 @@ onMounted(() => {
 .orders-table :deep(.el-table__row td.el-table__cell) {
   padding: 14px 16px;
 }
+
+
 
 /* 单元格样式 */
 .order-name-cell {
