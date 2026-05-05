@@ -113,6 +113,7 @@ func (f FloatOrString) Float64() float64 {
 // Product GPU产品信息
 type Product struct {
 	ID              string        `json:"id"`
+	ProductID       string        `json:"productId"` // PPIO 部分版本用 productId 作为产品标识
 	Name            string        `json:"name"`
 	CpuPerGpu       int           `json:"cpuPerGpu"`
 	MemoryPerGpu    int           `json:"memoryPerGpu"`
@@ -125,6 +126,17 @@ type Product struct {
 	SpotPrice       string        `json:"spotPrice"`
 	InventoryState  string        `json:"inventoryState"`
 	BillingMethods  []string      `json:"billingMethods"`
+}
+
+// GetProductID 获取用于创建实例的产品标识符
+func (p Product) GetProductID() string {
+	if p.ProductID != "" {
+		return p.ProductID
+	}
+	if p.ID != "" {
+		return p.ID
+	}
+	return p.Name
 }
 
 // ListProductsResponse 产品列表响应
@@ -247,27 +259,27 @@ type ConnectComponentSSH struct {
 
 // GPUInstance GPU实例信息
 type GPUInstance struct {
-	ID                  string              `json:"id"`
-	Id                  string              `json:"Id"`
-	Name                string              `json:"name"`
-	ClusterId           string              `json:"clusterId"`
-	ClusterName         string              `json:"clusterName"`
-	Status              string              `json:"status"`
-	ImageUrl            string              `json:"imageUrl"`
-	ProductId           string              `json:"productId"`
-	ProductName         string              `json:"productName"`
-	GpuNum              string              `json:"gpuNum"`
-	RootfsSize          int                 `json:"rootfsSize"`
-	PortMappings        []PortMapping       `json:"portMappings"`
-	SshCommand          string              `json:"sshCommand"`
-	Password            string              `json:"sshPassword"`
+	ID                  string               `json:"id"`
+	Id                  string               `json:"Id"`
+	Name                string               `json:"name"`
+	ClusterId           string               `json:"clusterId"`
+	ClusterName         string               `json:"clusterName"`
+	Status              string               `json:"status"`
+	ImageUrl            string               `json:"imageUrl"`
+	ProductId           string               `json:"productId"`
+	ProductName         string               `json:"productName"`
+	GpuNum              string               `json:"gpuNum"`
+	RootfsSize          int                  `json:"rootfsSize"`
+	PortMappings        []PortMapping        `json:"portMappings"`
+	SshCommand          string               `json:"sshCommand"`
+	Password            string               `json:"sshPassword"`
 	ConnectComponentSSH *ConnectComponentSSH `json:"connectComponentSSH"`
-	Network             *NetworkInfo        `json:"network"`
-	StatusError         *StatusError        `json:"statusError"`
-	CreatedAt           string              `json:"createdAt"`
-	LastStartedAt       string              `json:"lastStartedAt"`
-	BillingMode         string              `json:"billingMode"`
-	EndTime             string              `json:"endTime"`
+	Network             *NetworkInfo         `json:"network"`
+	StatusError         *StatusError         `json:"statusError"`
+	CreatedAt           string               `json:"createdAt"`
+	LastStartedAt       string               `json:"lastStartedAt"`
+	BillingMode         string               `json:"billingMode"`
+	EndTime             string               `json:"endTime"`
 }
 
 // GetID 获取实例ID（兼容大小写）
@@ -379,7 +391,7 @@ type metricsPoint struct {
 type metricsSeries struct {
 	Avg    []metricsPoint `json:"avg"`
 	GPUIds []struct {
-		GPUID string        `json:"gpuId"`
+		GPUID string         `json:"gpuId"`
 		Items []metricsPoint `json:"items"`
 	} `json:"gpuIds"`
 }
@@ -431,14 +443,68 @@ func (c *Client) GetInstanceMetrics(ctx context.Context, instanceID string, star
 		return nil, fmt.Errorf("metrics API error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
-	log.Printf("[ppio] Metrics raw response for %s: %s", instanceID, string(respBody))
-
 	var result GetInstanceMetricsResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal metrics response: %w", err)
 	}
-	log.Printf("[ppio] Metrics parsed for %s: cpu=%d, mem=%d, disk=%d, gpuAvg=%d, gpuMemAvg=%d",
-		instanceID, len(result.CPUUtilization), len(result.MemUtilization), len(result.RootDiskUtilization),
-		len(result.GPUUtilization.Avg), len(result.GPUMemUtilization.Avg))
 	return &result, nil
+}
+
+// ============================================================================
+// 镜像相关 API
+// ============================================================================
+
+// ImageTag 镜像标签
+type ImageTag struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+// Image 镜像信息
+type Image struct {
+	ID       string     `json:"id"`
+	Name     string     `json:"name"`
+	URL      string     `json:"url"`
+	Tags     []ImageTag `json:"tags"`
+	Metadata []string   `json:"metadata"`
+	Port     []string   `json:"port"`
+}
+
+// ListImagesResponse 镜像列表响应
+type ListImagesResponse struct {
+	Data     []Image `json:"data"`
+	PageSize int     `json:"pageSize"`
+	PageNum  int     `json:"pageNum"`
+	Total    int     `json:"total"`
+}
+
+// ListImages 获取镜像列表
+// imageType: base（平台官方镜像）或 private（私有仓库镜像）
+func (c *Client) ListImages(ctx context.Context, imageType, name string, pageSize, pageNum int) ([]Image, error) {
+	q := url.Values{}
+	q.Set("type", imageType)
+	if name != "" {
+		q.Set("name", name)
+	}
+	if pageSize > 0 {
+		q.Set("pageSize", fmt.Sprintf("%d", pageSize))
+	} else {
+		q.Set("pageSize", "100")
+	}
+	if pageNum > 0 {
+		q.Set("pageNum", fmt.Sprintf("%d", pageNum))
+	} else {
+		q.Set("pageNum", "1")
+	}
+
+	respBody, err := c.doRequest(ctx, "GET", "/images?"+q.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var result ListImagesResponse
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+	return result.Data, nil
 }

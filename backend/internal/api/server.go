@@ -26,6 +26,7 @@ type Router struct {
 	executor        *service.ExecutorService
 	gpuService      *service.GPUService
 	instanceService *service.InstanceService
+	imageService    *service.ImageService
 }
 
 // NewServer 创建服务器
@@ -63,8 +64,14 @@ func NewServer(router *Router) *Server {
 	// 存储管理
 	storage := r.Group("/api/v1/storage")
 	{
+		storage.GET("/buckets", router.listBuckets)
+		storage.POST("/buckets", router.createBucket)
+		storage.DELETE("/buckets/:id", router.deleteBucket)
 		storage.GET("/files", router.listFiles)
 		storage.GET("/download-url", router.getDownloadURL)
+		storage.POST("/upload", router.uploadFile)
+		storage.DELETE("/files", router.deleteFile)
+		storage.POST("/folders", router.createFolder)
 	}
 
 	// GPU实例管理
@@ -92,17 +99,28 @@ func NewServer(router *Router) *Server {
 		workOrders.GET("", router.listWorkOrders)
 	}
 
+	// 镜像管理
+	images := r.Group("/api/v1/images")
+	{
+		images.GET("/search", router.searchImages)
+		images.GET("/private", router.listPrivateImages)
+		images.GET("/favorites", router.listFavorites)
+		images.POST("/favorites", router.addFavorite)
+		images.DELETE("/favorites", router.removeFavorite)
+	}
+
 	return &Server{router: r}
 }
 
 // NewRouter 创建路由
-func NewRouter(taskService *service.TaskService, storageService *service.StorageService, executor *service.ExecutorService, gpuService *service.GPUService, instanceService *service.InstanceService) *Router {
+func NewRouter(taskService *service.TaskService, storageService *service.StorageService, executor *service.ExecutorService, gpuService *service.GPUService, instanceService *service.InstanceService, imageService *service.ImageService) *Router {
 	return &Router{
 		taskService:     taskService,
 		storageService:  storageService,
 		executor:        executor,
 		gpuService:      gpuService,
 		instanceService: instanceService,
+		imageService:    imageService,
 	}
 }
 
@@ -211,11 +229,76 @@ func (r *Router) getTaskLogs(c *gin.Context) {
 	}
 }
 
+// listBuckets 列出桶
+func (r *Router) listBuckets(c *gin.Context) {
+	userID := c.Query("user_id")
+	if userID == "" {
+		userID = "default"
+	}
+
+	buckets, err := r.storageService.ListBuckets(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"buckets": buckets,
+		"total":   len(buckets),
+	})
+}
+
+// createBucket 创建桶
+func (r *Router) createBucket(c *gin.Context) {
+	var req struct {
+		Name     string `json:"name" binding:"required"`
+		IsPublic bool   `json:"is_public"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID := c.Query("user_id")
+	if userID == "" {
+		userID = "default"
+	}
+
+	bucket, err := r.storageService.CreateBucket(c.Request.Context(), userID, req.Name, req.IsPublic)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, bucket)
+}
+
+// deleteBucket 删除桶
+func (r *Router) deleteBucket(c *gin.Context) {
+	bucketID := c.Param("id")
+	userID := c.Query("user_id")
+	if userID == "" {
+		userID = "default"
+	}
+
+	if err := r.storageService.DeleteBucket(c.Request.Context(), bucketID, userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "bucket deleted"})
+}
+
 // listFiles 列出文件
 func (r *Router) listFiles(c *gin.Context) {
+	bucketName := c.Query("bucket")
+	if bucketName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bucket is required"})
+		return
+	}
 	prefix := c.Query("prefix")
 
-	objects, err := r.storageService.ListObjects(c.Request.Context(), prefix)
+	objects, err := r.storageService.ListObjects(c.Request.Context(), bucketName, prefix)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -226,19 +309,98 @@ func (r *Router) listFiles(c *gin.Context) {
 
 // getDownloadURL 获取下载URL
 func (r *Router) getDownloadURL(c *gin.Context) {
+	bucketName := c.Query("bucket")
+	if bucketName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bucket is required"})
+		return
+	}
 	key := c.Query("key")
 	if key == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "key is required"})
 		return
 	}
 
-	url, err := r.storageService.GetPresignedURL(c.Request.Context(), key)
+	url, err := r.storageService.GetPresignedURL(c.Request.Context(), bucketName, key)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"url": url})
+}
+
+// uploadFile 上传文件到COS
+func (r *Router) uploadFile(c *gin.Context) {
+	bucketName := c.PostForm("bucket")
+	if bucketName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bucket is required"})
+		return
+	}
+
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file is required"})
+		return
+	}
+	defer file.Close()
+
+	prefix := c.PostForm("prefix")
+	key := prefix + header.Filename
+
+	if err := r.storageService.UploadFromReader(c.Request.Context(), bucketName, key, file, header.Size); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "uploaded",
+		"key":    key,
+	})
+}
+
+// deleteFile 删除COS文件
+func (r *Router) deleteFile(c *gin.Context) {
+	bucketName := c.Query("bucket")
+	if bucketName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bucket is required"})
+		return
+	}
+	key := c.Query("key")
+	if key == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "key is required"})
+		return
+	}
+
+	if err := r.storageService.DeleteObject(c.Request.Context(), bucketName, key); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+}
+
+// createFolder 创建文件夹
+func (r *Router) createFolder(c *gin.Context) {
+	var req struct {
+		Bucket string `json:"bucket" binding:"required"`
+		Prefix string `json:"prefix"`
+		Name   string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	key := req.Prefix + req.Name + "/"
+	if err := r.storageService.CreateFolder(c.Request.Context(), req.Bucket, key); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "created",
+		"key":    key,
+	})
 }
 
 // listGPUProviders 列出可用的GPU Provider
@@ -393,4 +555,125 @@ func generateClientID() string {
 	defer clientIDMu.Unlock()
 	clientIDCounter++
 	return "client-" + string(rune('0'+clientIDCounter%10))
+}
+
+// ============================================================================
+// 镜像管理
+// ============================================================================
+
+// searchImages 搜索 Docker Hub 公开镜像
+func (r *Router) searchImages(c *gin.Context) {
+	query := c.Query("q")
+	if query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query parameter 'q' is required"})
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	userID := c.Query("user_id")
+	if userID == "" {
+		userID = "default"
+	}
+
+	result, err := r.imageService.SearchPublicImages(c.Request.Context(), query, page, pageSize)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 检查每个结果是否已被当前用户收藏
+	favorites, _ := r.imageService.ListFavorites(c.Request.Context(), userID)
+	favMap := make(map[string]bool)
+	for _, f := range favorites {
+		favMap[f.ImageName] = true
+	}
+
+	images := make([]gin.H, 0, len(result.Results))
+	for _, item := range result.Results {
+		images = append(images, gin.H{
+			"name":         item.Name,
+			"description":  item.Description,
+			"star_count":   item.StarCount,
+			"is_official":  item.IsOfficial,
+			"is_favorited": favMap[item.Name],
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"count":   result.Count,
+		"page":    result.Page,
+		"images":  images,
+	})
+}
+
+// listPrivateImages 列出私有镜像
+func (r *Router) listPrivateImages(c *gin.Context) {
+	provider := c.Query("provider")
+	images, err := r.imageService.ListPrivateImages(c.Request.Context(), provider)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"images": images})
+}
+
+// listFavorites 列出用户收藏的镜像
+func (r *Router) listFavorites(c *gin.Context) {
+	userID := c.Query("user_id")
+	if userID == "" {
+		userID = "default"
+	}
+
+	favorites, err := r.imageService.ListFavorites(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"favorites": favorites})
+}
+
+// addFavorite 添加收藏
+func (r *Router) addFavorite(c *gin.Context) {
+	var req struct {
+		UserID      string `json:"user_id"`
+		ImageName   string `json:"image_name" binding:"required"`
+		Description string `json:"description"`
+		StarCount   int    `json:"star_count"`
+		IsOfficial  bool   `json:"is_official"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.UserID == "" {
+		req.UserID = "default"
+	}
+
+	fav, err := r.imageService.AddFavorite(c.Request.Context(), req.UserID, req.ImageName, req.Description, req.StarCount, req.IsOfficial)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, fav)
+}
+
+// removeFavorite 取消收藏
+func (r *Router) removeFavorite(c *gin.Context) {
+	userID := c.Query("user_id")
+	imageName := c.Query("image_name")
+	if userID == "" {
+		userID = "default"
+	}
+	if imageName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image_name is required"})
+		return
+	}
+
+	if err := r.imageService.RemoveFavorite(c.Request.Context(), userID, imageName); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "removed from favorites"})
 }

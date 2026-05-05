@@ -60,11 +60,11 @@ func main() {
 	}
 
 	// 4. 初始化执行器
-	execEngine := executor.NewExecutor(getEnv("DATA_DIR", "/app/data"), getEnv("OUTPUT_DIR", "/app/output"))
+	execEngine := executor.NewExecutor(getEnv("DATA_DIR", "/tmp/mlrancher/data"), getEnv("OUTPUT_DIR", "/tmp/mlrancher/output"))
 
 	// 5. 初始化服务层（使用数据库）
-	taskService := service.NewTaskService(taskRepo, execEngine, cosClient)
-	storageService := service.NewStorageService(cosClient)
+	bucketRepo := repository.NewStorageBucketRepository(db)
+	storageService := service.NewStorageService(cosClient, bucketRepo)
 	executorService := service.NewExecutorService(execEngine)
 
 	// 6. 初始化GPU Provider管理器（统一由第一个成功初始化的provider创建）
@@ -86,14 +86,21 @@ func main() {
 	instanceRepo := repository.NewInstanceRepository(db)
 	instanceService := service.NewInstanceService(instanceRepo, providerManager)
 
-	// 9. 运行启动自检（异步按项执行，15秒超时）
+	// 9. 初始化任务服务（需要 instanceService）
+	taskService := service.NewTaskService(taskRepo, execEngine, cosClient, instanceService)
+
+	// 9. 初始化镜像服务
+	imageFavoriteRepo := repository.NewImageFavoriteRepository(db)
+	imageService := service.NewImageService(imageFavoriteRepo)
+
+	// 11. 运行启动自检（异步按项执行，15秒超时）
 	runStartupChecks(taskService, cosClient, cosHealth, providerManager, vastaiHealth, ppioHealth)
 
-	// 10. 初始化路由
-	router := api.NewRouter(taskService, storageService, executorService, gpuService, instanceService)
+	// 12. 初始化路由
+	router := api.NewRouter(taskService, storageService, executorService, gpuService, instanceService, imageService)
 	server := api.NewServer(router)
 
-	// 11. 启动服务器
+	// 12. 启动服务器
 	port := getEnv("PORT", "8080")
 	log.Printf("Server starting on port %s...", port)
 
@@ -130,7 +137,7 @@ func initDatabase() (*gorm.DB, error) {
 	}
 
 	// 自动迁移表结构
-	if err := db.AutoMigrate(&model.Task{}, &model.TaskLog{}, &model.Instance{}); err != nil {
+	if err := db.AutoMigrate(&model.Task{}, &model.TaskLog{}, &model.Instance{}, &model.StorageBucket{}, &model.ImageFavorite{}); err != nil {
 		return nil, fmt.Errorf("failed to auto migrate: %w", err)
 	}
 

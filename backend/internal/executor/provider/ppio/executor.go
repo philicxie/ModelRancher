@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"ml-platform/internal/executor/provider"
-	"regexp"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -118,7 +118,7 @@ func (p *Provider) CreateTask(ctx context.Context, req *provider.CreateTaskReque
 
 	createReq := CreateGPUInstanceRequest{
 		Name:        "ml-task-" + req.TaskID,
-		ProductID:   selected.ID,
+		ProductID:   selected.GetProductID(),
 		GpuNum:      req.GPUs,
 		RootfsSize:  diskSize,
 		ImageUrl:    req.Image,
@@ -137,8 +137,10 @@ func (p *Provider) CreateTask(ctx context.Context, req *provider.CreateTaskReque
 		createReq.Envs = envs
 	}
 
+	log.Printf("[ppio] CreateGPUInstance request: %+v", createReq)
 	result, err := p.client.CreateGPUInstance(ctx, createReq)
 	if err != nil {
+		log.Printf("[ppio] CreateGPUInstance failed with productId=%s, gpuNum=%d", createReq.ProductID, createReq.GpuNum)
 		return nil, fmt.Errorf("failed to create instance: %w", err)
 	}
 
@@ -350,7 +352,7 @@ func (p *Provider) ListAvailableResources(ctx context.Context, req *provider.Res
 		}
 
 		resources = append(resources, &provider.Resource{
-			ID:          prod.ID,
+			ID:          prod.GetProductID(),
 			Provider:    "ppio",
 			GPUType:     prod.Name,
 			NumGPUs:     gpuNum,
@@ -418,7 +420,7 @@ func (p *Provider) CreateInstance(ctx context.Context, req *provider.CreateInsta
 
 	var billingMode string
 	for _, prod := range products {
-		if prod.ID == productID {
+		if prod.GetProductID() == productID {
 			// 确保 rootfsSize 在合法范围内
 			if prod.MinRootFS > 0 && diskSize < prod.MinRootFS {
 				diskSize = prod.MinRootFS
@@ -451,6 +453,7 @@ func (p *Provider) CreateInstance(ctx context.Context, req *provider.CreateInsta
 		ImageUrl:    req.Image,
 		Ports:       "22/tcp",
 		BillingMode: billingMode,
+		Entrypoint:  "sleep 100d", // 占位命令，保持实例运行；真实训练命令由平台后续通过 SSH 下发
 	}
 
 	result, err := p.client.CreateGPUInstance(ctx, createReq)
@@ -609,17 +612,37 @@ func (p *Provider) parseSSHInfo(inst *GPUInstance) (host string, port int, user 
 	user = "root"
 	port = 22
 
-	// 1. 优先从 connectComponentSSH 获取 sshCommand 和 password
-	var cmdStr string
+	// 1. 优先从 connectComponentSSH 获取 Address/Port（最准确的公网连接信息）
 	if inst.ConnectComponentSSH != nil {
-		cmdStr = inst.ConnectComponentSSH.SshCommand
 		password = inst.ConnectComponentSSH.Password
 		if inst.ConnectComponentSSH.Username != "" {
 			user = inst.ConnectComponentSSH.Username
 		}
+		if inst.ConnectComponentSSH.Address != "" {
+			addr := inst.ConnectComponentSSH.Address
+			// Address 可能包含端口（如 host:port），需拆分
+			if strings.Contains(addr, ":") {
+				if h, pStr, err := net.SplitHostPort(addr); err == nil {
+					addr = h
+					if p, err := strconv.Atoi(pStr); err == nil && p > 0 {
+						port = p
+					}
+				}
+			}
+			if inst.ConnectComponentSSH.Port > 0 {
+				port = inst.ConnectComponentSSH.Port
+			}
+			host = addr
+			log.Printf("[PPIO] parseSSHInfo using connectComponentSSH: host=%s, port=%d, user=%s", host, port, user)
+			return
+		}
 	}
 
-	// 2. connectComponentSSH 为空时，回退到根级别字段
+	// 2. connectComponentSSH 无 Address 时，回退到 sshCommand 和根级别字段
+	var cmdStr string
+	if inst.ConnectComponentSSH != nil {
+		cmdStr = inst.ConnectComponentSSH.SshCommand
+	}
 	if cmdStr == "" {
 		cmdStr = inst.SshCommand
 	}
@@ -628,32 +651,51 @@ func (p *Provider) parseSSHInfo(inst *GPUInstance) (host string, port int, user 
 	}
 
 	// 3. 从 sshCommand 解析 host/port/user
+	//    支持两种格式: ssh -p port user@host  和  ssh user@host -p port
 	if cmdStr != "" {
-		re := regexp.MustCompile(`ssh\s+(\w+)@([^\s]+)(?:\s+-p\s+(\d+))?`)
-		if matches := re.FindStringSubmatch(cmdStr); len(matches) >= 3 {
-			user = matches[1]
-			host = matches[2]
-			if len(matches) >= 4 && matches[3] != "" {
-				port, _ = strconv.Atoi(matches[3])
+		fields := strings.Fields(cmdStr)
+		for i := 0; i < len(fields); i++ {
+			if fields[i] == "-p" && i+1 < len(fields) {
+				if p, err := strconv.Atoi(fields[i+1]); err == nil && p > 0 {
+					port = p
+				}
 			}
-			// sshCommand 解析成功时直接返回，不再 fallback
-			return
+			if strings.Contains(fields[i], "@") {
+				parts := strings.Split(fields[i], "@")
+				if len(parts) == 2 {
+					user = parts[0]
+					host = parts[1]
+				}
+			}
+		}
+		if host != "" {
+			log.Printf("[PPIO] parseSSHInfo from sshCommand: host=%s, port=%d, user=%s", host, port, user)
 		}
 	}
 
-	// 4. sshCommand 为空时，尝试从 portMappings 中找 SSH 端口
-	for _, pm := range inst.PortMappings {
-		if pm.Type == "tcp" && (pm.Port == 22 || pm.Port == 2222) {
-			port = pm.Port
-			if pm.Endpoint != "" {
-				host = pm.Endpoint
+	// 4. sshCommand 解析失败时，尝试从 portMappings 中找
+	if host == "" {
+		for _, pm := range inst.PortMappings {
+			if pm.Type == "tcp" && pm.Endpoint != "" {
+				// endpoint 可能包含端口（如 host:port）
+				endpointHost := pm.Endpoint
+				if strings.Contains(pm.Endpoint, ":") {
+					if h, pStr, err := net.SplitHostPort(pm.Endpoint); err == nil {
+						endpointHost = h
+						if p, err := strconv.Atoi(pStr); err == nil && p > 0 {
+							port = p
+						}
+					}
+				}
+				host = endpointHost
+				log.Printf("[PPIO] parseSSHInfo from portMappings: host=%s, port=%d", host, port)
 				return
 			}
 		}
 	}
 
 	// 5. 尝试从 network.ip 获取
-	if inst.Network != nil && inst.Network.IP != "" {
+	if host == "" && inst.Network != nil && inst.Network.IP != "" {
 		host = inst.Network.IP
 	}
 

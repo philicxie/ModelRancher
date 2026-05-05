@@ -177,6 +177,11 @@ func (e *Executor) UnsubscribeLogs(taskID, clientID string) {
 	}
 }
 
+// EmitLog 公共方法：发送日志（供外部服务调用）
+func (e *Executor) EmitLog(taskID, level, message string) {
+	e.emitLog(taskID, level, message)
+}
+
 // emitLog 发送日志
 func (e *Executor) emitLog(taskID, level, message string) {
 	entry := &model.TaskLog{

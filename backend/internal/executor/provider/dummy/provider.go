@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sync"
 	"time"
@@ -18,7 +18,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Provider 本地Dummy Provider，使用本地Docker运行任务
+// Provider 本地Dummy Provider，纯内存模拟，不依赖Docker
 type Provider struct {
 	executor  *executor.Executor
 	tasks     map[string]*provider.TaskInfo
@@ -27,10 +27,9 @@ type Provider struct {
 	instMu    sync.RWMutex
 }
 
-// instanceRecord Lite实例记录
+// instanceRecord 实例记录
 type instanceRecord struct {
 	info      *provider.InstanceInfo
-	container string
 	status    string
 	createdAt time.Time
 }
@@ -48,7 +47,7 @@ func NewProvider(exec *executor.Executor) *Provider {
 // 训练任务接口
 // ============================================================================
 
-// CreateTask 创建训练任务（本地Docker异步执行）
+// CreateTask 创建训练任务
 func (p *Provider) CreateTask(ctx context.Context, req *provider.CreateTaskRequest) (*provider.TaskInfo, error) {
 	taskID := req.TaskID
 	if taskID == "" {
@@ -76,7 +75,6 @@ func (p *Provider) CreateTask(ctx context.Context, req *provider.CreateTaskReque
 	p.tasks[taskID] = info
 	p.taskMu.Unlock()
 
-	// 异步执行本地Docker任务
 	go p.runTask(task, info)
 
 	return info, nil
@@ -140,7 +138,7 @@ func (p *Provider) CancelTask(ctx context.Context, taskID string) error {
 
 // UploadFile 上传文件到本地任务目录
 func (p *Provider) UploadFile(ctx context.Context, taskID, localPath, remotePath string) error {
-	dataDir := filepath.Join("/app/data", taskID)
+	dataDir := filepath.Join("/tmp", "ml-data", taskID)
 	target := filepath.Join(dataDir, remotePath)
 	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 		return fmt.Errorf("failed to create target directory: %w", err)
@@ -163,7 +161,7 @@ func (p *Provider) UploadFile(ctx context.Context, taskID, localPath, remotePath
 
 // DownloadFile 从本地任务目录下载文件
 func (p *Provider) DownloadFile(ctx context.Context, taskID, remotePath, localPath string) error {
-	outputDir := filepath.Join("/app/output", taskID)
+	outputDir := filepath.Join("/tmp", "ml-output", taskID)
 	src := filepath.Join(outputDir, remotePath)
 	if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
 		return fmt.Errorf("failed to create local directory: %w", err)
@@ -184,20 +182,20 @@ func (p *Provider) DownloadFile(ctx context.Context, taskID, remotePath, localPa
 	return err
 }
 
-// ExecuteSSHCommand 在本地执行命令
+// ExecuteSSHCommand 执行命令（本地回退）
 func (p *Provider) ExecuteSSHCommand(ctx context.Context, taskID, command string) (string, string, int, error) {
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
-	output, err := cmd.CombinedOutput()
-	stdout := string(output)
-	exitCode := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			exitCode = -1
-		}
+	// 尝试作为 instanceID 在容器内执行（兼容实例模式）
+	p.instMu.RLock()
+	rec, ok := p.instances[taskID]
+	p.instMu.RUnlock()
+
+	if ok {
+		// 模拟容器内执行
+		return fmt.Sprintf("[dummy exec %s] %s", rec.info.InstanceID, command), "", 0, nil
 	}
-	return stdout, "", exitCode, nil
+
+	// 回退到宿主机执行
+	return fmt.Sprintf("[dummy local] %s", command), "", 0, nil
 }
 
 // ============================================================================
@@ -206,7 +204,7 @@ func (p *Provider) ExecuteSSHCommand(ctx context.Context, taskID, command string
 
 // ListAvailableResources 列出本地可用资源
 func (p *Provider) ListAvailableResources(ctx context.Context, req *provider.ResourceRequest) ([]*provider.Resource, error) {
-	resources := []*provider.Resource{
+	return []*provider.Resource{
 		{
 			ID:          "local-docker",
 			Provider:    "local",
@@ -215,33 +213,21 @@ func (p *Provider) ListAvailableResources(ctx context.Context, req *provider.Res
 			GPURAM:      0,
 			DiskSpace:   1000,
 			Reliability: 1.0,
-			Price:       0,
+			Price:       0.05,
 			Location:    "本地",
 		},
-	}
-
-	// 检查是否可以使用GPU
-	if hasGPU() {
-		resources = append(resources, &provider.Resource{
+		{
 			ID:          "local-gpu",
 			Provider:    "local",
-			GPUType:     "Local GPU",
+			GPUType:     "RTX 4090",
 			NumGPUs:     1,
-			GPURAM:      0,
+			GPURAM:      24,
 			DiskSpace:   1000,
 			Reliability: 1.0,
-			Price:       0,
+			Price:       0.15,
 			Location:    "本地",
-		})
-	}
-
-	return resources, nil
-}
-
-func hasGPU() bool {
-	cmd := exec.Command("nvidia-smi", "-L")
-	err := cmd.Run()
-	return err == nil
+		},
+	}, nil
 }
 
 // GetStats 获取统计信息
@@ -266,197 +252,142 @@ func (p *Provider) GetStats(ctx context.Context) (*provider.Stats, error) {
 	return stats, nil
 }
 
-// HealthCheck 健康检查（检查Docker可用性）
+// HealthCheck 健康检查（始终通过）
 func (p *Provider) HealthCheck(ctx context.Context) error {
-	_, err := os.Stat("/var/run/docker.sock")
-	if err != nil {
-		return fmt.Errorf("docker socket not found: %w", err)
-	}
-	cmd := exec.CommandContext(ctx, "docker", "version")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("docker daemon not accessible: %w", err)
-	}
 	return nil
 }
 
 // ============================================================================
-// Lite Instance 操作
+// Lite Instance 操作（纯内存模拟）
 // ============================================================================
 
-// CreateInstance 创建Lite实例（本地Docker容器）
+// CreateInstance 创建实例（即刻成功，纯内存）
 func (p *Provider) CreateInstance(ctx context.Context, req *provider.CreateInstanceRequest) (*provider.InstanceInfo, error) {
 	instanceID := fmt.Sprintf("local-%d", time.Now().UnixNano())
-	containerName := fmt.Sprintf("ml-instance-%s", instanceID)
-
-	// 创建持久化数据目录
-	dataDir := filepath.Join("/app/data", "instances", instanceID)
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create instance data dir: %w", err)
-	}
-
-	// 启动一个后台Docker容器
-	image := req.Image
-	if image == "" {
-		image = "ubuntu:22.04"
-	}
-	cmd := exec.CommandContext(ctx, "docker", "run", "-d", "--name", containerName,
-		"-v", fmt.Sprintf("%s:/workspace", dataDir),
-		image, "sleep", "infinity")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create container: %w, output: %s", err, string(output))
-	}
-
-	containerID := string(output)
-	if len(containerID) > 12 {
-		containerID = containerID[:12]
-	}
+	sshPort := 22000 + rand.Intn(1000)
+	password := randomPassword(12)
 
 	info := &provider.InstanceInfo{
 		InstanceID: instanceID,
 		SSHHost:    "localhost",
-		SSHPort:    0,
+		SSHPort:    sshPort,
 		SSHUser:    "root",
+		Password:   password,
+		SSHCommand: fmt.Sprintf("ssh root@localhost -p %d", sshPort),
 		Status:     "running",
 	}
 
 	p.instMu.Lock()
 	p.instances[instanceID] = &instanceRecord{
 		info:      info,
-		container: containerName,
 		status:    "running",
 		createdAt: time.Now(),
 	}
 	p.instMu.Unlock()
 
-	log.Printf("[dummy] Created local instance %s (container: %s)", instanceID, containerName)
+	log.Printf("[dummy] Created instance %s (ssh: %s)", instanceID, info.SSHCommand)
 	return info, nil
 }
 
-// StopInstance 停止Lite实例
+// randomPassword 生成随机密码
+func randomPassword(length int) string {
+	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = chars[rand.Intn(len(chars))]
+	}
+	return string(b)
+}
+
+// StopInstance 停止实例（仅改内存状态）
 func (p *Provider) StopInstance(ctx context.Context, instanceID string) error {
-	p.instMu.RLock()
+	p.instMu.Lock()
+	defer p.instMu.Unlock()
+
 	rec, ok := p.instances[instanceID]
-	p.instMu.RUnlock()
 	if !ok {
 		return fmt.Errorf("instance not found: %s", instanceID)
 	}
-
-	cmd := exec.CommandContext(ctx, "docker", "stop", rec.container)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to stop container: %w, output: %s", err, string(output))
-	}
-
-	p.instMu.Lock()
 	rec.status = "stopped"
 	rec.info.Status = "stopped"
-	p.instMu.Unlock()
+	log.Printf("[dummy] Stopped instance %s", instanceID)
 	return nil
 }
 
-// StartInstance 启动Lite实例
+// StartInstance 启动实例（仅改内存状态）
 func (p *Provider) StartInstance(ctx context.Context, instanceID string) error {
-	p.instMu.RLock()
+	p.instMu.Lock()
+	defer p.instMu.Unlock()
+
 	rec, ok := p.instances[instanceID]
-	p.instMu.RUnlock()
 	if !ok {
 		return fmt.Errorf("instance not found: %s", instanceID)
 	}
-
-	cmd := exec.CommandContext(ctx, "docker", "start", rec.container)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to start container: %w, output: %s", err, string(output))
-	}
-
-	p.instMu.Lock()
 	rec.status = "running"
 	rec.info.Status = "running"
-	p.instMu.Unlock()
+	log.Printf("[dummy] Started instance %s", instanceID)
 	return nil
 }
 
-// DestroyInstance 销毁Lite实例
+// DestroyInstance 销毁实例（从内存中删除）
 func (p *Provider) DestroyInstance(ctx context.Context, instanceID string) error {
-	p.instMu.RLock()
-	rec, ok := p.instances[instanceID]
-	p.instMu.RUnlock()
+	p.instMu.Lock()
+	defer p.instMu.Unlock()
+
+	_, ok := p.instances[instanceID]
 	if !ok {
 		return fmt.Errorf("instance not found: %s", instanceID)
 	}
-
-	cmd := exec.CommandContext(ctx, "docker", "rm", "-f", rec.container)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Printf("[dummy] Warning: failed to remove container: %v, output: %s", err, string(output))
-	}
-
-	p.instMu.Lock()
 	delete(p.instances, instanceID)
-	p.instMu.Unlock()
+	log.Printf("[dummy] Destroyed instance %s", instanceID)
 	return nil
 }
 
 // GetInstance 获取实例详情
 func (p *Provider) GetInstance(ctx context.Context, instanceID string) (*provider.InstanceInfo, error) {
 	p.instMu.RLock()
+	defer p.instMu.RUnlock()
+
 	rec, ok := p.instances[instanceID]
-	p.instMu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("instance not found: %s", instanceID)
 	}
 	return rec.info, nil
 }
 
-// GetInstanceMetrics 获取本地实例监控指标（模拟数据）
+// GetInstanceMetrics 获取实例监控指标（模拟数据）
 func (p *Provider) GetInstanceMetrics(ctx context.Context, instanceID string, startTime, endTime int64) (*provider.InstanceMetrics, error) {
+	p.instMu.RLock()
+	_, ok := p.instances[instanceID]
+	p.instMu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("instance not found: %s", instanceID)
+	}
+
 	now := time.Now().Unix()
-	// 生成一些模拟的波动数据
 	randFloat := func(min, max float64) float64 {
 		return min + (max-min)*float64(now%100)/100
 	}
 
 	return &provider.InstanceMetrics{
-		CPUUtilization:      []provider.MetricPoint{{Timestamp: now, Value: randFloat(10, 60)}},
-		MemUtilization:      []provider.MetricPoint{{Timestamp: now, Value: randFloat(20, 70)}},
-		RootDiskUtilization: []provider.MetricPoint{{Timestamp: now, Value: randFloat(5, 30)}},
-		GPUUtilizationAvg:   []provider.MetricPoint{{Timestamp: now, Value: randFloat(0, 90)}},
-		GPUUtilization: []provider.GPUInstanceMetrics{
-			{GPUID: "0", Items: []provider.MetricPoint{{Timestamp: now, Value: randFloat(0, 90)}}},
-		},
+		CPUUtilization:       []provider.MetricPoint{{Timestamp: now, Value: randFloat(10, 60)}},
+		MemUtilization:       []provider.MetricPoint{{Timestamp: now, Value: randFloat(20, 70)}},
+		RootDiskUtilization:  []provider.MetricPoint{{Timestamp: now, Value: randFloat(5, 30)}},
+		GPUUtilizationAvg:    []provider.MetricPoint{{Timestamp: now, Value: randFloat(0, 90)}},
+		GPUUtilization:       []provider.GPUInstanceMetrics{{GPUID: "0", Items: []provider.MetricPoint{{Timestamp: now, Value: randFloat(0, 90)}}}},
 		GPUMemUtilizationAvg: []provider.MetricPoint{{Timestamp: now, Value: randFloat(10, 80)}},
-		GPUMemUtilization: []provider.GPUInstanceMetrics{
-			{GPUID: "0", Items: []provider.MetricPoint{{Timestamp: now, Value: randFloat(10, 80)}}},
-		},
+		GPUMemUtilization:    []provider.GPUInstanceMetrics{{GPUID: "0", Items: []provider.MetricPoint{{Timestamp: now, Value: randFloat(10, 80)}}}},
 	}, nil
 }
 
 // GetInstanceStatus 获取实例状态
 func (p *Provider) GetInstanceStatus(ctx context.Context, instanceID string) (string, error) {
 	p.instMu.RLock()
+	defer p.instMu.RUnlock()
+
 	rec, ok := p.instances[instanceID]
-	p.instMu.RUnlock()
 	if !ok {
 		return "", fmt.Errorf("instance not found: %s", instanceID)
 	}
-
-	// 查询容器实际状态
-	cmd := exec.CommandContext(ctx, "docker", "inspect", "-f", "{{.State.Status}}", rec.container)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return rec.status, nil
-	}
-
-	actualStatus := string(output)
-	if len(actualStatus) > 0 && actualStatus[len(actualStatus)-1] == '\n' {
-		actualStatus = actualStatus[:len(actualStatus)-1]
-	}
-
-	p.instMu.Lock()
-	rec.status = actualStatus
-	rec.info.Status = actualStatus
-	p.instMu.Unlock()
-
-	return actualStatus, nil
+	return rec.status, nil
 }

@@ -40,6 +40,18 @@ func (r *InstanceRepository) GetByID(ctx context.Context, id string) (*model.Ins
 	return &inst, nil
 }
 
+// GetByName 按名称查询实例
+func (r *InstanceRepository) GetByName(ctx context.Context, name string) (*model.Instance, error) {
+	var inst model.Instance
+	if err := r.db.WithContext(ctx).Where("name = ?", name).First(&inst).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("instance not found: %s", name)
+		}
+		return nil, fmt.Errorf("failed to get instance by name: %w", err)
+	}
+	return &inst, nil
+}
+
 // ListByUser 列出用户的所有实例
 func (r *InstanceRepository) ListByUser(ctx context.Context, userID string) ([]*model.Instance, error) {
 	var instances []*model.Instance

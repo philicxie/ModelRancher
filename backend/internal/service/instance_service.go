@@ -35,10 +35,10 @@ type gpuSnapshot struct {
 const metricsMaxPoints = 120
 
 type metricsBuffer struct {
-	mu        sync.RWMutex
-	points    []metricsSnapshot
-	instID    string // provider instance id
-	provider  string
+	mu       sync.RWMutex
+	points   []metricsSnapshot
+	instID   string // provider instance id
+	provider string
 }
 
 func (b *metricsBuffer) append(s metricsSnapshot) {
@@ -74,10 +74,10 @@ func (b *metricsBuffer) getRange(startTime, endTime int64) []metricsSnapshot {
 
 // InstanceService 实例租赁服务
 type InstanceService struct {
-	repo           *repository.InstanceRepository
+	repo            *repository.InstanceRepository
 	providerManager *provider.ProviderManager
-	metricsCache   map[string]*metricsBuffer // key: instance.ID (our system id)
-	metricsMu      sync.RWMutex
+	metricsCache    map[string]*metricsBuffer // key: instance.ID (our system id)
+	metricsMu       sync.RWMutex
 }
 
 // NewInstanceService 创建实例服务
@@ -204,6 +204,11 @@ func (s *InstanceService) pollInstanceReady(instanceID, providerName, providerIn
 	}
 }
 
+// FindInstanceByName 按名称查找实例
+func (s *InstanceService) FindInstanceByName(ctx context.Context, name string) (*model.Instance, error) {
+	return s.repo.GetByName(ctx, name)
+}
+
 // GetInstance 获取实例详情（同步 provider 真实状态）
 func (s *InstanceService) GetInstance(ctx context.Context, id string) (*model.Instance, error) {
 	inst, err := s.repo.GetByID(ctx, id)
@@ -323,8 +328,6 @@ func (s *InstanceService) pollAllRunningMetrics(ctx context.Context) {
 					return
 				}
 			}
-			log.Printf("[metrics] Got metrics for %s: cpu=%d, mem=%d, disk=%d, gpuAvg=%d points",
-				instID, len(m.CPUUtilization), len(m.MemUtilization), len(m.RootDiskUtilization), len(m.GPUUtilizationAvg))
 			s.mergeMetrics(instID, m)
 		}(inst.ID, inst.ProviderInstID, p)
 	}
@@ -387,16 +390,6 @@ func (s *InstanceService) mergeMetrics(instID string, m *provider.InstanceMetric
 		s.appendMetricsSnapshot(instID, now, cpuVal, memVal, diskVal, gpuVal, gpuMemVal)
 	}
 
-	// 打印缓存大小
-	s.metricsMu.RLock()
-	buf, ok := s.metricsCache[instID]
-	s.metricsMu.RUnlock()
-	if ok {
-		buf.mu.RLock()
-		count := len(buf.points)
-		buf.mu.RUnlock()
-		log.Printf("[metrics] Cache for %s now has %d points", instID, count)
-	}
 }
 
 func (s *InstanceService) appendMetricsSnapshot(instID string, ts int64, cpu, mem, disk, gpu, gpuMem float64) {
@@ -702,17 +695,19 @@ func (s *InstanceService) pollInstanceDestroyed(instanceID, providerName, provid
 func (s *InstanceService) markDestroyed(instanceID string) {
 	ctx := context.Background()
 	now := time.Now()
-	inst := &model.Instance{
-		ID:          instanceID,
-		Status:      model.InstanceStatusDestroyed,
-		DestroyedAt: &now,
+
+	// 先取出完整记录，避免 Select("*") 把其他字段清零
+	inst, err := s.repo.GetByID(ctx, instanceID)
+	if err != nil {
+		log.Printf("[instance] Failed to get instance %s for markDestroyed: %v", instanceID, err)
+		return
 	}
+	inst.Status = model.InstanceStatusDestroyed
+	inst.DestroyedAt = &now
 	if err := s.repo.Update(ctx, inst); err != nil {
 		log.Printf("[instance] Failed to mark %s as destroyed: %v", instanceID, err)
 	}
 }
-
-
 
 // startAutoReleaseLoop 自动释放过期实例
 func (s *InstanceService) startAutoReleaseLoop() {
