@@ -1,0 +1,16 @@
+# MNIST 训练镜像 — 配套 train_mnist.py
+# 构建: docker build -f Dockerfile.mnist -t mnist-train .
+# 说明: 不预设业务启动命令，由 PPIO 平台自行注入；镜像内仅准备好 Python 环境与训练脚本。
+
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
+
+WORKDIR /app
+
+# 安装系统依赖（curl 用于下载训练数据，ca-certificates 用于 HTTPS）
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 仅需 torchvision，基础镜像已包含 torch
+RUN pip install --no-cache-dir torchvision==0.15.2
+
+COPY train_mnist.py /app/train_mnist.py

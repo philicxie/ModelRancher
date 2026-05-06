@@ -57,7 +57,8 @@ func NewServer(router *Router) *Server {
 		tasks.POST("", router.createTask)
 		tasks.GET("", router.listTasks)
 		tasks.GET("/:id", router.getTask)
-		tasks.DELETE("/:id", router.cancelTask)
+		tasks.DELETE("/:id", router.deleteTask)
+		tasks.POST("/:id/cancel", router.cancelTask)
 		tasks.GET("/:id/logs", router.getTaskLogs)
 	}
 
@@ -192,6 +193,17 @@ func (r *Router) cancelTask(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Task cancelled"})
+}
+
+// deleteTask 删除任务
+func (r *Router) deleteTask(c *gin.Context) {
+	taskID := c.Param("id")
+	if err := r.taskService.DeleteTask(c.Request.Context(), taskID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Task deleted"})
 }
 
 // getTaskLogs 获取任务日志

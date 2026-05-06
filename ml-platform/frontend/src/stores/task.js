@@ -56,9 +56,19 @@ export const useTaskStore = defineStore('tasks', {
 
     async cancelTask(taskId) {
       try {
-        await api.delete(`/tasks/${taskId}`)
+        await api.post(`/tasks/${taskId}/cancel`)
         const task = this.tasks.find(t => t.id === taskId)
         if (task) task.status = 'cancelled'
+      } catch (err) {
+        this.error = err.message
+        throw err
+      }
+    },
+
+    async deleteTask(taskId) {
+      try {
+        await api.delete(`/tasks/${taskId}`)
+        this.tasks = this.tasks.filter(t => t.id !== taskId)
       } catch (err) {
         this.error = err.message
         throw err

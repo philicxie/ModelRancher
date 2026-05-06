@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -202,6 +203,10 @@ func (s *TaskService) executeRemoteTask(ctx context.Context, task *model.Task) {
 	}
 
 	// 3. 下载输入数据
+	// PPIO 路径：run_train.sh 已内置 coscli 下载逻辑，跳过后端独立下载
+	if task.Provider == "ppio" && task.DataPath != "" {
+		s.emitLog(task.ID, "info", "Input data will be downloaded by run_train.sh on startup")
+	}
 	if len(task.StorageBindings) > 0 {
 		var inputBindings []model.StorageBinding
 		for _, b := range task.StorageBindings {
@@ -220,7 +225,8 @@ func (s *TaskService) executeRemoteTask(ctx context.Context, task *model.Task) {
 				}
 			}
 		}
-	} else if task.DataPath != "" {
+	} else if task.DataPath != "" && task.Provider != "ppio" {
+		// 非 PPIO 路径（Docker 远程）仍需后端先下载
 		task.Phase = model.TaskPhaseDownloading
 		s.updateTask(ctx, task)
 		if err := s.downloadInputData(ctx, task, sshClient); err != nil {
@@ -383,7 +389,7 @@ func (s *TaskService) downloadInputData(ctx context.Context, task *model.Task, s
 		dirCmd := fmt.Sprintf("mkdir -p \"%s\"", dirOf(localPath))
 		sshClient.Exec(dirCmd)
 
-		cmd := fmt.Sprintf("coscli cp -f %s %s", shellQuote(fmt.Sprintf("cos://%s/%s", bucketName, dl.Key)), shellQuote(localPath))
+		cmd := fmt.Sprintf("coscli cp %s %s", shellQuote(fmt.Sprintf("cos://%s/%s", bucketName, dl.Key)), shellQuote(localPath))
 		if cosRegion != "" {
 			cmd += fmt.Sprintf(" -r %s", shellQuote(cosRegion))
 		}
@@ -430,7 +436,7 @@ func (s *TaskService) downloadBindingData(ctx context.Context, task *model.Task,
 		dirCmd := fmt.Sprintf("mkdir -p \"%s\"", dirOf(localPath))
 		sshClient.Exec(dirCmd)
 
-		cmd := fmt.Sprintf("coscli cp -f %s %s", shellQuote(fmt.Sprintf("cos://%s/%s", bucketName, dl.Key)), shellQuote(localPath))
+		cmd := fmt.Sprintf("coscli cp %s %s", shellQuote(fmt.Sprintf("cos://%s/%s", bucketName, dl.Key)), shellQuote(localPath))
 		if cosRegion != "" {
 			cmd += fmt.Sprintf(" -r %s", shellQuote(cosRegion))
 		}
@@ -540,6 +546,7 @@ func (s *TaskService) monitorTraining(ctx context.Context, task *model.Task, ssh
 }
 
 // startPPIOTraining 在 PPIO 实例内直接启动训练进程（不经过 Docker）
+// 镜像中已预置 /app/run_train.sh，平台只需通过 base64 编码写入 /app/train_cmd.sh
 func (s *TaskService) startPPIOTraining(ctx context.Context, task *model.Task, sshClient *executor.SSHClient) (int, error) {
 	// 检查 Python 可用性
 	pythonCmd := "python3"
@@ -560,51 +567,49 @@ func (s *TaskService) startPPIOTraining(ctx context.Context, task *model.Task, s
 	}
 	s.emitLog(task.ID, "info", fmt.Sprintf("Training command: %s", trainCmd))
 
-	// 构建环境变量
-	envExports := []string{
+	// 构建环境变量设置脚本内容
+	envLines := []string{
 		fmt.Sprintf("export TASK_ID=%s", task.ID),
 	}
-
 	if len(task.StorageBindings) > 0 {
 		for _, binding := range task.StorageBindings {
 			localDir := fmt.Sprintf("/app/bindings/%s", binding.EnvName)
-			envExports = append(envExports, fmt.Sprintf("export %s=%s", binding.EnvName, localDir))
+			envLines = append(envLines, fmt.Sprintf("export %s=%s", binding.EnvName, localDir))
 		}
 	} else {
-		envExports = append(envExports, "export DATA_PATH=/app/data", "export OUTPUT_PATH=/app/output")
+		envLines = append(envLines, "export DATA_PATH=/app/data", "export OUTPUT_PATH=/app/output")
 	}
-
 	for _, ev := range task.EnvVars {
-		envExports = append(envExports, fmt.Sprintf("export %s", ev))
+		envLines = append(envLines, fmt.Sprintf("export %s", ev))
+	}
+	if task.DataPath != "" {
+		envLines = append(envLines, fmt.Sprintf("export COS_INPUT_PATH=cos://%s", task.DataPath))
 	}
 
-	envStr := strings.Join(envExports, "\n")
+	envScript := strings.Join(envLines, "\n") + "\n"
+	trainScript := envScript + trainCmd + "\n"
 
-	// 构建启动脚本（不用 set -e，确保退出码被记录；用 set -x 输出调试信息）
-	script := fmt.Sprintf(`#!/bin/bash
-set -x
-cd /app
-%s
-%s
-EXIT_CODE=$?
-echo $EXIT_CODE > /app/train.exitcode
-exit $EXIT_CODE
-`, envStr, trainCmd)
-
-	// 写入脚本
-	writeCmd := fmt.Sprintf("cat > /app/run_train.sh << 'SCRIPT_EOF'\n%s\nSCRIPT_EOF", script)
-	log.Printf("[task %s] SSH write script command:\n%s", task.ID, writeCmd)
+	// 通过 base64 编码写入 train_cmd.sh，彻底避免 heredoc 引号/换行问题
+	encoded := base64.StdEncoding.EncodeToString([]byte(trainScript))
+	writeCmd := fmt.Sprintf("echo %s | base64 -d > /app/train_cmd.sh && chmod +x /app/train_cmd.sh", shellQuote(encoded))
+	log.Printf("[task %s] SSH write train_cmd.sh via base64 (len=%d)", task.ID, len(encoded))
 	if _, stderr, err := sshClient.Exec(writeCmd); err != nil {
-		return 0, fmt.Errorf("failed to write training script: %v, stderr: %s", err, stderr)
+		return 0, fmt.Errorf("failed to write train_cmd.sh: %v, stderr: %s", err, stderr)
 	}
-	if _, _, err := sshClient.Exec("chmod +x /app/run_train.sh"); err != nil {
-		return 0, fmt.Errorf("failed to chmod script: %v", err)
+
+	// 同时写入 train_env.sh（便于单独查看环境变量）
+	envEncoded := base64.StdEncoding.EncodeToString([]byte(envScript))
+	writeEnvCmd := fmt.Sprintf("echo %s | base64 -d > /app/train_env.sh", shellQuote(envEncoded))
+	if _, stderr, err := sshClient.Exec(writeEnvCmd); err != nil {
+		log.Printf("[task %s] Warning: failed to write train_env.sh: %v, stderr: %s", task.ID, err, stderr)
 	}
 
 	// 清理旧的退出码文件
-	sshClient.Exec("rm -f /app/train.exitcode /app/train.pid /app/train.log")
+	if _, stderr, err := sshClient.Exec("rm -f /app/train.exitcode /app/train.pid /app/train.log"); err != nil {
+		log.Printf("[task %s] Warning: failed to clean old files: %v, stderr: %s", task.ID, err, stderr)
+	}
 
-	// 启动训练进程
+	// 启动训练进程（使用镜像中预置的 run_train.sh）
 	startCmd := "nohup bash /app/run_train.sh > /app/train.log 2>&1 & echo $! > /app/train.pid"
 	log.Printf("[task %s] SSH start training command: %s", task.ID, startCmd)
 	if _, stderr, err := sshClient.Exec(startCmd); err != nil {
@@ -708,7 +713,7 @@ func (s *TaskService) uploadOutputData(ctx context.Context, task *model.Task, ss
 		relPath := strings.TrimPrefix(file, "/app/output/")
 		cosKey := prefix + relPath
 
-		cmd := fmt.Sprintf("coscli cp -f %s %s", shellQuote(file), shellQuote(fmt.Sprintf("cos://%s/%s", bucketName, cosKey)))
+		cmd := fmt.Sprintf("coscli cp %s %s", shellQuote(file), shellQuote(fmt.Sprintf("cos://%s/%s", bucketName, cosKey)))
 		if cosRegion != "" {
 			cmd += fmt.Sprintf(" -r %s", shellQuote(cosRegion))
 		}
@@ -755,7 +760,7 @@ func (s *TaskService) uploadBindingData(ctx context.Context, task *model.Task, s
 		relPath := strings.TrimPrefix(file, localBaseDir+"/")
 		cosKey := prefix + relPath
 
-		cmd := fmt.Sprintf("coscli cp -f %s %s", shellQuote(file), shellQuote(fmt.Sprintf("cos://%s/%s", bucketName, cosKey)))
+		cmd := fmt.Sprintf("coscli cp %s %s", shellQuote(file), shellQuote(fmt.Sprintf("cos://%s/%s", bucketName, cosKey)))
 		if cosRegion != "" {
 			cmd += fmt.Sprintf(" -r %s", shellQuote(cosRegion))
 		}
@@ -836,6 +841,38 @@ func (s *TaskService) ListTasks(ctx context.Context) ([]*model.Task, error) {
 	s.mu.Unlock()
 
 	return tasks, nil
+}
+
+// DeleteTask 删除任务（从数据库中永久删除）
+func (s *TaskService) DeleteTask(ctx context.Context, taskID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 先尝试从缓存获取，确认任务存在
+	if _, ok := s.tasks[taskID]; !ok {
+		// 缓存中没有，去数据库确认
+		if _, err := s.repo.GetByID(ctx, taskID); err != nil {
+			return fmt.Errorf("task not found: %s", taskID)
+		}
+	}
+
+	// 如果任务还在运行中，先尝试取消
+	if task, ok := s.tasks[taskID]; ok && task != nil {
+		if task.Status == model.TaskStatusRunning || task.Status == model.TaskStatusPending {
+			if task.InstanceID == "" {
+				_ = s.executor.CancelTask(ctx, taskID)
+			}
+		}
+	}
+
+	// 从数据库删除
+	if err := s.repo.Delete(ctx, taskID); err != nil {
+		return fmt.Errorf("failed to delete task: %w", err)
+	}
+
+	// 从缓存删除
+	delete(s.tasks, taskID)
+	return nil
 }
 
 // CancelTask 取消任务

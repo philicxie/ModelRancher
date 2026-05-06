@@ -73,9 +73,16 @@
         </router-link>
         <router-link to="/browse" class="nav-item" :class="{ 'active': route.path === '/browse' }">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="12 2 2 7 12 12 22 7 12 2"/>
-            <polyline points="2 17 12 22 22 17"/>
-            <polyline points="2 12 12 17 22 12"/>
+            <rect x="4" y="4" width="16" height="16" rx="2" ry="2"/>
+            <rect x="9" y="9" width="6" height="6"/>
+            <line x1="9" y1="1" x2="9" y2="4"/>
+            <line x1="15" y1="1" x2="15" y2="4"/>
+            <line x1="9" y1="20" x2="9" y2="23"/>
+            <line x1="15" y1="20" x2="15" y2="23"/>
+            <line x1="20" y1="9" x2="23" y2="9"/>
+            <line x1="20" y1="14" x2="23" y2="14"/>
+            <line x1="1" y1="9" x2="4" y2="9"/>
+            <line x1="1" y1="14" x2="4" y2="14"/>
           </svg>
           <span class="nav-text">算力市场</span>
         </router-link>
@@ -91,9 +98,9 @@
 
         <router-link to="/images" class="nav-item" :class="{ 'active': route.path === '/images' }">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-            <circle cx="8.5" cy="8.5" r="1.5"/>
-            <polyline points="21 15 16 10 5 21"/>
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+            <line x1="12" y1="22.08" x2="12" y2="12"/>
           </svg>
           <span class="nav-text">镜像管理</span>
         </router-link>
@@ -202,7 +209,7 @@ body {
 /* 应用容器 */
 .app-container {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
   overflow: hidden;
 }
 
@@ -451,6 +458,8 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
+  height: 100vh;
+  overflow-y: auto;
 }
 
 /* 顶部栏 */

@@ -3,313 +3,705 @@
     <div class="page-header">
       <div>
         <h1 class="page-title">创建训练任务</h1>
-        <p class="page-subtitle">配置训练环境和参数</p>
+        <p class="page-subtitle">配置训练环境、算力资源和存储路径</p>
       </div>
     </div>
 
-    <!-- 步骤指示器 -->
-    <div class="step-indicator">
-      <div
-        v-for="(step, index) in steps"
-        :key="index"
-        class="step-item"
-        :class="{ 'active': currentStep === index, 'completed': currentStep > index }">
-        <div class="step-number">
-          <svg v-if="currentStep > index" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-          <span v-else>{{ index + 1 }}</span>
+    <el-form :model="form" :rules="rules" ref="formRef" label-position="top" class="create-form">
+      <!-- 基本信息 -->
+      <section class="form-section">
+        <h2 class="section-title">
+          <span class="section-num">1</span>
+          基本信息
+        </h2>
+        <div class="section-body">
+          <el-form-item label="任务名称" prop="name">
+            <el-input v-model="form.name" placeholder="给任务起一个描述性的名称" size="large" clearable />
+          </el-form-item>
+          <el-form-item label="任务描述">
+            <el-input v-model="form.description" type="textarea" :rows="3" placeholder="描述这个训练任务的目的和内容（可选）" size="large" />
+          </el-form-item>
         </div>
-        <span class="step-label">{{ step }}</span>
-      </div>
-    </div>
+      </section>
 
-    <!-- 表单内容 -->
-    <div class="form-container">
-      <el-card class="form-card">
-        <!-- Step 1: 基本信息 -->
-        <div v-show="currentStep === 0" class="step-content">
-          <h2 class="step-title">基本信息</h2>
-          <p class="step-description">填写任务的基本信息</p>
+      <!-- 算力配置 -->
+      <section class="form-section">
+        <h2 class="section-title">
+          <span class="section-num">2</span>
+          算力配置
+        </h2>
+        <div class="section-body">
+          <!-- 执行模式切换 -->
+          <el-form-item label="执行模式">
+            <div class="mode-switch">
+              <div
+                class="mode-btn"
+                :class="{ active: !isRemote }"
+                @click="setLocalMode"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                  <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                  <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                </svg>
+                本地执行
+              </div>
+              <div
+                class="mode-btn"
+                :class="{ active: isRemote }"
+                @click="setRemoteMode"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                  <path d="M2 17l10 5 10-5"/>
+                  <path d="M2 12l10 5 10-5"/>
+                </svg>
+                远程实例
+              </div>
+            </div>
+          </el-form-item>
 
-          <el-form :model="form" :rules="rules" ref="formRef" label-position="top">
-            <el-form-item label="任务名称" prop="name">
-              <el-input
-                v-model="form.name"
-                placeholder="给任务起一个描述性的名称"
-                size="large"
-                clearable>
-                <template #prefix>
-                  <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                  </svg>
-                </template>
-              </el-input>
-            </el-form-item>
+          <!-- 本地执行提示 -->
+          <div v-if="!isRemote" class="local-hint">
+            任务将在当前服务器上以本地 Docker 容器运行，适合调试和小规模测试。
+          </div>
 
-            <el-form-item label="任务描述" prop="description">
-              <el-input
-                v-model="form.description"
-                type="textarea"
-                :rows="3"
-                placeholder="描述这个训练任务的目的和内容（可选）"
-                size="large" />
-            </el-form-item>
-          </el-form>
-        </div>
+          <!-- 远程实例搜索 -->
+          <template v-if="isRemote">
+            <!-- 已选实例摘要 -->
+            <div v-if="selectedInstance" class="selected-instance-bar">
+              <div class="selected-info">
+                <span class="selected-badge">已选择</span>
+                <span class="selected-gpu">{{ selectedInstance.gpu_name }} × {{ selectedInstance.num_gpus }}</span>
+                <span class="selected-price">${{ formatPrice(selectedInstance.price_per_hour) }}/h</span>
+                <span class="selected-provider" :class="selectedInstance.provider">{{ selectedInstance.provider }}</span>
+              </div>
+              <el-button link type="danger" size="small" @click="clearSelection">取消选择</el-button>
+            </div>
 
-        <!-- Step 2: 环境配置 -->
-        <div v-show="currentStep === 1" class="step-content">
-          <h2 class="step-title">环境配置</h2>
-          <p class="step-description">选择训练环境和镜像</p>
+            <!-- 筛选器 -->
+            <div class="instance-filters">
+              <el-select v-model="filters.gpuType" placeholder="GPU 类型" clearable @change="onFilterChange" size="default" style="width: 160px">
+                <el-option v-for="g in gpuTypeOptions" :key="g" :label="g" :value="g" />
+              </el-select>
+              <el-select v-model="filters.provider" placeholder="供应商" clearable @change="onFilterChange" size="default" style="width: 130px">
+                <el-option v-for="p in providerOptions" :key="p.value" :label="p.label" :value="p.value" />
+              </el-select>
+              <el-input-number v-model="filters.maxPrice" :min="0" :step="0.5" placeholder="最高价格 $/h" controls-position="right" @change="onFilterChange" size="default" style="width: 140px" />
+              <el-input-number v-model="filters.minGPUs" :min="1" :max="8" placeholder="最少 GPU" controls-position="right" @change="onFilterChange" size="default" style="width: 110px" />
+              <el-select v-model="filters.sortBy" placeholder="排序" @change="onFilterChange" size="default" style="width: 140px">
+                <el-option label="价格从低到高" value="price" />
+                <el-option label="价格从高到低" value="price_desc" />
+                <el-option label="显存从高到低" value="gpu_ram" />
+              </el-select>
+              <el-button size="default" @click="fetchInstances">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <polyline points="1 20 1 14 7 14"/>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+                刷新
+              </el-button>
+            </div>
 
-          <el-form :model="form" label-position="top">
-            <el-form-item label="Docker镜像">
-              <div class="image-grid">
-                <div
-                  v-for="image in availableImages"
-                  :key="image.value"
-                  class="image-option"
-                  :class="{ 'selected': form.image === image.value }"
-                  @click="form.image = image.value">
-                  <div class="image-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                      <circle cx="8.5" cy="8.5" r="1.5"/>
-                      <polyline points="21 15 16 10 5 21"/>
-                    </svg>
-                  </div>
-                  <div class="image-info">
-                    <span class="image-name">{{ image.label }}</span>
-                    <span class="image-desc">{{ image.desc }}</span>
-                  </div>
-                  <div class="selected-check" v-if="form.image === image.value">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
+            <!-- 实例列表 -->
+            <div v-loading="instancesLoading" class="instance-grid">
+              <div v-if="instances.length === 0 && !instancesLoading" class="instance-empty">
+                <p>暂无符合条件的实例，请调整筛选条件</p>
+              </div>
+
+              <div
+                v-for="inst in instances"
+                :key="inst.id"
+                class="instance-card"
+                :class="{ selected: selectedInstance?.id === inst.id }"
+                @click="selectInstance(inst)"
+              >
+                <div class="inst-header">
+                  <div class="inst-provider" :class="inst.provider">{{ getProviderInitial(inst.provider) }}</div>
+                  <div class="inst-price">
+                    <span class="inst-price-num">${{ formatPrice(inst.price_per_hour) }}</span>
+                    <span class="inst-price-unit">/h</span>
                   </div>
                 </div>
+                <div class="inst-gpu">
+                  {{ inst.gpu_name }}
+                  <span class="inst-gpu-count">×{{ inst.num_gpus }}</span>
+                </div>
+                <div class="inst-specs">
+                  <span>显存 {{ inst.gpu_ram_display }}</span>
+                  <span>磁盘 {{ formatDisk(inst.disk_space) }}GB</span>
+                </div>
+                <div class="inst-specs">
+                  <span>可靠 {{ (inst.reliability * 100).toFixed(0) }}%</span>
+                  <span>{{ inst.location }}</span>
+                </div>
+                <div v-if="selectedInstance?.id === inst.id" class="inst-selected-mark">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  已选择
+                </div>
               </div>
-            </el-form-item>
+            </div>
 
-            <el-form-item label="或输入自定义镜像" class="custom-image">
+            <!-- 时长和磁盘配置（选中实例后显示） -->
+            <div v-if="selectedInstance" class="resource-grid" style="margin-top: 16px">
+              <el-form-item label="磁盘大小 (GB)">
+                <el-input-number v-model="form.disk_size" :min="10" :max="1000" :step="10" size="large" style="width: 100%" />
+              </el-form-item>
+              <el-form-item label="运行时长 (小时)">
+                <el-input-number v-model="form.duration_hours" :min="1" :max="168" size="large" style="width: 100%" />
+              </el-form-item>
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <!-- 环境配置 -->
+      <section class="form-section">
+        <h2 class="section-title">
+          <span class="section-num">3</span>
+          环境配置
+        </h2>
+        <div class="section-body">
+          <el-form-item label="训练镜像" prop="image">
+            <div class="image-select-trigger" @click="openImageSelector" width="1200">
               <el-input
                 v-model="form.image"
-                placeholder="registry.example.com/my-image:tag"
-                size="large">
-                <template #prefix>
-                  <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                  </svg>
-                </template>
-              </el-input>
-            </el-form-item>
-          </el-form>
-        </div>
-
-        <!-- Step 3: 训练命令 -->
-        <div v-show="currentStep === 2" class="step-content">
-          <h2 class="step-title">训练命令</h2>
-          <p class="step-description">配置训练脚本和参数</p>
-
-          <el-form :model="form" label-position="top">
-            <el-form-item label="执行命令" prop="command">
-              <el-input
-                v-model="form.command"
-                type="textarea"
-                :rows="5"
-                placeholder="python train.py --data-dir /data --output-dir /output --epochs 100"
+                placeholder="点击选择镜像"
                 size="large"
-                class="command-input" />
-              <div class="form-tip">
-                <svg class="tip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="12" y1="16" x2="12" y2="12"/>
-                  <line x1="12" y1="8" x2="12.01" y2="8"/>
-                </svg>
-                <span>数据目录挂载在 <code>/data</code>，输出目录挂载在 <code>/output</code></span>
+                readonly
+                class="image-readonly-input"
+              >
+                <template #suffix>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <path d="M6 9l6 6 6-6"/>
+                  </svg>
+                </template>
+              </el-input>
+            </div>
+          </el-form-item>
+
+          <el-form-item label="执行命令" prop="command">
+            <el-input
+              v-model="form.command"
+              type="textarea"
+              :rows="4"
+              placeholder="python train.py --data-dir /data --output-dir /output --epochs 100"
+              size="large"
+            />
+          </el-form-item>
+
+          <el-form-item label="环境变量">
+            <div class="env-vars-grid">
+              <div v-for="(env, i) in form.env_vars" :key="i" class="env-row">
+                <el-input v-model="form.env_vars[i]" placeholder="KEY=value" size="default" style="width: 100%">
+                  <template #append>
+                    <el-button @click="removeEnv(i)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </el-button>
+                  </template>
+                </el-input>
               </div>
-            </el-form-item>
-          </el-form>
-        </div>
-
-        <!-- Step 4: 存储配置 -->
-        <div v-show="currentStep === 3" class="step-content">
-          <h2 class="step-title">存储配置</h2>
-          <p class="step-description">配置数据输入和输出位置</p>
-
-          <el-form :model="form" label-position="top">
-            <el-form-item label="数据目录 (COS路径)">
-              <el-input
-                v-model="form.data_path"
-                placeholder="my-bucket/train-data/"
-                size="large">
-                <template #prefix>
-                  <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                    <line x1="12" y1="18" x2="12" y2="12"/>
-                    <line x1="9" y1="15" x2="15" y2="15"/>
-                  </svg>
-                </template>
-              </el-input>
-              <div class="form-tip">训练数据在COS中的路径，将下载到 /data 目录（可选）</div>
-            </el-form-item>
-
-            <el-form-item label="输出目录 (COS路径)">
-              <el-input
-                v-model="form.output_path"
-                placeholder="my-bucket/output/"
-                size="large">
-                <template #prefix>
-                  <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="17 8 12 3 7 8"/>
-                    <line x1="12" y1="3" x2="12" y2="15"/>
-                  </svg>
-                </template>
-              </el-input>
-              <div class="form-tip">训练结果将上传到此路径（可选）</div>
-            </el-form-item>
-          </el-form>
-        </div>
-
-        <!-- 步骤按钮 -->
-        <div class="form-actions">
-          <el-button v-if="currentStep > 0" @click="prevStep" size="large">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 12H5"/>
-              <path d="M12 19l-7-7 7-7"/>
-            </svg>
-            上一步
-          </el-button>
-
-          <el-button
-            v-if="currentStep < steps.length - 1"
-            type="primary"
-            size="large"
-            @click="nextStep">
-            下一步
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M5 12h14"/>
-              <path d="M12 5l7 7-7 7"/>
-            </svg>
-          </el-button>
-
-          <el-button
-            v-if="currentStep === steps.length - 1"
-            type="primary"
-            size="large"
-            @click="handleSubmit"
-            :loading="loading">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-            创建任务
-          </el-button>
-        </div>
-      </el-card>
-
-      <!-- 右侧配置预览 -->
-      <div class="config-preview" v-if="currentStep < steps.length - 1">
-        <el-card class="preview-card">
-          <template #header>
-            <span>配置预览</span>
-          </template>
-          <div class="preview-content">
-            <div class="preview-item">
-              <span class="preview-label">任务名称</span>
-              <span class="preview-value">{{ form.name || '-' }}</span>
+              <el-button link type="primary" @click="addEnv" class="add-env-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                添加环境变量
+              </el-button>
             </div>
-            <div class="preview-item">
-              <span class="preview-label">镜像</span>
-              <span class="preview-value">{{ form.image || '-' }}</span>
-            </div>
-            <div class="preview-item">
-              <span class="preview-label">命令</span>
-              <code class="preview-code">{{ form.command || '-' }}</code>
+          </el-form-item>
+        </div>
+      </section>
+
+      <!-- 存储配置 -->
+      <section class="form-section">
+        <h2 class="section-title">
+          <span class="section-num">4</span>
+          存储配置
+        </h2>
+        <div class="section-body">
+          <div class="storage-bindings">
+            <div
+              v-for="(binding, i) in form.storage_bindings"
+              :key="i"
+              class="storage-binding-row"
+            >
+              <el-select v-model="binding.type" size="default" style="width: 100px; flex-shrink: 0;">
+                <el-option label="输入" value="input" />
+                <el-option label="输出" value="output" />
+              </el-select>
+              <el-input
+                v-model="binding.env_name"
+                placeholder="环境变量名"
+                size="default"
+                style="width: 160px; flex-shrink: 0;"
+              />
+              <div class="storage-path-trigger" @click="openStorageSelector(i)">
+                <el-input
+                  v-model="binding.path"
+                  placeholder="点击选择存储路径"
+                  size="default"
+                  readonly
+                  style="width: 100%"
+                >
+                  <template #suffix>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                      <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </template>
+                </el-input>
+              </div>
+              <el-button link type="danger" size="small" @click="removeStorageBinding(i)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </el-button>
             </div>
           </div>
-        </el-card>
+          <el-button link type="primary" @click="addStorageBinding" class="add-storage-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            添加存储映射
+          </el-button>
+          <div class="field-hint" style="margin-top: 8px;">
+            输入路径会在任务运行前下载到执行环境，输出路径会在任务完成后上传到对象存储。环境变量可在训练命令中使用。
+          </div>
+        </div>
+      </section>
+
+      <!-- 底部操作 -->
+      <div class="form-footer">
+        <el-button size="large" @click="router.push('/tasks')">取消</el-button>
+        <el-button type="primary" size="large" @click="showConfirm = true">
+          创建任务
+        </el-button>
       </div>
-    </div>
+    </el-form>
+
+    <!-- 镜像选择弹窗 -->
+    <el-dialog v-model="showImageSelector" title="选择训练镜像" width="640px" :close-on-click-modal="false">
+      <div class="image-selector-tabs">
+        <div
+          v-for="tab in imageTabs"
+          :key="tab.key"
+          class="image-tab"
+          :class="{ active: activeImageTab === tab.key }"
+          @click="activeImageTab = tab.key"
+        >
+          {{ tab.label }}
+        </div>
+      </div>
+
+      <div v-if="imageLoading" class="image-loading">
+        <el-skeleton :rows="4" animated />
+      </div>
+
+      <!-- 我的收藏 -->
+      <div v-else-if="activeImageTab === 'favorites'" class="image-list">
+        <div v-if="favoriteImages.length === 0" class="image-list-empty">
+          <p>暂无收藏镜像</p>
+          <span>前往镜像管理页面搜索并收藏公开镜像</span>
+        </div>
+        <div
+          v-for="img in favoriteImages"
+          :key="img.id"
+          class="image-list-item"
+          :class="{ selected: form.image === img.image_name }"
+          @click="pickImage(img.image_name)"
+        >
+          <div class="image-list-name">{{ img.image_name }}</div>
+          <div class="image-list-desc">{{ img.description || '暂无描述' }}</div>
+          <div class="image-list-meta">
+            <span v-if="img.is_official" class="official-tag">官方</span>
+            <span class="star-count">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12">
+                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+              </svg>
+              {{ formatStars(img.star_count) }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 私有镜像 -->
+      <div v-else-if="activeImageTab === 'private'" class="image-list">
+        <div v-if="privateImages.length === 0" class="image-list-empty">
+          <p>暂无私有镜像</p>
+        </div>
+        <div
+          v-for="img in privateImages"
+          :key="img.name"
+          class="image-list-item"
+          :class="{ selected: form.image === img.name }"
+          @click="pickImage(img.name)"
+        >
+          <div class="image-list-name">{{ img.name }}</div>
+          <div class="image-list-desc">{{ img.description || '暂无描述' }}</div>
+          <div class="image-list-meta">
+            <span class="private-tag">私有</span>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="showImageSelector = false">取消</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 确认弹窗 -->
+    <el-dialog v-model="showConfirm" title="确认任务配置" width="560px" :close-on-click-modal="false">
+      <div class="confirm-body">
+        <div class="confirm-section">
+          <h4>基本信息</h4>
+          <div class="confirm-row"><span class="confirm-label">任务名称</span><span class="confirm-value">{{ form.name || '-' }}</span></div>
+          <div class="confirm-row"><span class="confirm-label">描述</span><span class="confirm-value">{{ form.description || '-' }}</span></div>
+        </div>
+
+        <div class="confirm-section">
+          <h4>算力配置</h4>
+          <div class="confirm-row"><span class="confirm-label">执行模式</span><span class="confirm-value">{{ providerLabel }}</span></div>
+          <template v-if="form.provider !== ''">
+            <div class="confirm-row"><span class="confirm-label">GPU</span><span class="confirm-value">{{ form.gpu_name }} × {{ form.num_gpus }}</span></div>
+            <div class="confirm-row"><span class="confirm-label">磁盘</span><span class="confirm-value">{{ form.disk_size }} GB</span></div>
+            <div class="confirm-row"><span class="confirm-label">时长</span><span class="confirm-value">{{ form.duration_hours }} 小时</span></div>
+          </template>
+        </div>
+
+        <div class="confirm-section">
+          <h4>环境配置</h4>
+          <div class="confirm-row"><span class="confirm-label">镜像</span><span class="confirm-value code">{{ form.image }}</span></div>
+          <div class="confirm-row"><span class="confirm-label">命令</span><span class="confirm-value code">{{ form.command }}</span></div>
+          <div class="confirm-row" v-if="form.env_vars.length > 0">
+            <span class="confirm-label">环境变量</span>
+            <div class="confirm-value env-list">
+              <div v-for="(env, i) in form.env_vars" :key="i" class="env-tag">{{ env }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="confirm-section">
+          <h4>存储配置</h4>
+          <div v-for="(binding, i) in form.storage_bindings" :key="i" class="confirm-row">
+            <span class="confirm-label">{{ binding.type === 'input' ? '输入' : '输出' }}</span>
+            <div class="confirm-value">
+              <code class="storage-binding-confirm">
+                {{ binding.env_name }} = {{ binding.path || '-' }}
+              </code>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="showConfirm = false">取消</el-button>
+        <el-button type="primary" @click="handleSubmit" :loading="loading">确认创建</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 存储路径选择弹窗 -->
+    <StoragePathSelector
+      v-model="showStorageSelector"
+      @select="onStorageSelect"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useTaskStore } from '../stores/task'
 import { ElMessage } from 'element-plus'
+import StoragePathSelector from '../components/StoragePathSelector.vue'
 
 const router = useRouter()
+const route = useRoute()
 const taskStore = useTaskStore()
 const formRef = ref(null)
-const currentStep = ref(0)
 const loading = ref(false)
-
-const steps = ['基本信息', '环境配置', '训练命令', '存储配置']
+const showConfirm = ref(false)
 
 const form = reactive({
   name: '',
   description: '',
+  provider: '',
+  offer_id: '',
+  gpu_name: 'CPU',
+  num_gpus: 0,
+  disk_size: 50,
+  duration_hours: 1,
+  price_per_hour: 0,
   image: 'pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime',
   command: '',
-  data_path: '',
-  output_path: ''
+  env_vars: [],
+  storage_bindings: [
+    { type: 'input', env_name: 'DATA_PATH', path: '' },
+    { type: 'output', env_name: 'OUTPUT_PATH', path: '' }
+  ]
 })
 
-const availableImages = [
-  { label: 'PyTorch 2.0', value: 'pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime', desc: 'CUDA 11.7 + cuDNN 8' },
-  { label: 'TensorFlow 2.13', value: 'tensorflow/tensorflow:2.13.0-gpu', desc: 'GPU 支持版本' },
-  { label: 'Python 3.10', value: 'python:3.10-slim', desc: '轻量级基础镜像' },
-  { label: 'Python 3.9', value: 'python:3.9-slim', desc: '轻量级基础镜像' },
-  { label: 'JAX', value: 'jax:latest-cuda11-pjax', desc: 'Google JAX 框架' }
-]
+// 实例搜索
+const isRemote = ref(false)
+const instances = ref([])
+const instancesLoading = ref(false)
+const selectedInstance = ref(null)
+const gpuTypeOptions = ref([])
+const providerOptions = ref([])
+const filters = reactive({
+  gpuType: '',
+  provider: '',
+  maxPrice: null,
+  minGPUs: 1,
+  sortBy: 'price'
+})
 
 const rules = {
   name: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
+  image: [{ required: true, message: '请选择或输入镜像', trigger: 'blur' }],
   command: [{ required: true, message: '请输入训练命令', trigger: 'blur' }]
 }
 
-const nextStep = async () => {
-  if (currentStep.value === 0) {
-    try {
-      await formRef.value.validate()
-      currentStep.value++
-    } catch (e) {
-      return
-    }
-  } else {
-    currentStep.value++
+// 镜像选择
+const showImageSelector = ref(false)
+const activeImageTab = ref('favorites')
+const imageTabs = [
+  { key: 'favorites', label: '我的收藏' },
+  { key: 'private', label: '私有镜像' }
+]
+const favoriteImages = ref([])
+const privateImages = ref([])
+const imageLoading = ref(false)
+
+const providerLabel = computed(() => {
+  if (!isRemote.value) return '本地执行'
+  if (!selectedInstance.value) return '远程实例（未选择）'
+  return `${selectedInstance.value.provider} — ${selectedInstance.value.gpu_name} × ${selectedInstance.value.num_gpus}`
+})
+
+// 实例搜索
+const setLocalMode = () => {
+  isRemote.value = false
+  selectedInstance.value = null
+  form.provider = ''
+  form.offer_id = ''
+}
+
+const setRemoteMode = () => {
+  isRemote.value = true
+  if (instances.value.length === 0) {
+    fetchInstances()
   }
 }
 
-const prevStep = () => {
-  if (currentStep.value > 0) {
-    currentStep.value--
+let debounceTimer = null
+const onFilterChange = () => {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => fetchInstances(), 400)
+}
+
+const fetchInstances = async () => {
+  instancesLoading.value = true
+  try {
+    const params = new URLSearchParams()
+    if (filters.gpuType) params.append('gpu_type', filters.gpuType)
+    if (filters.provider) params.append('provider', filters.provider)
+    if (filters.maxPrice) params.append('max_price', filters.maxPrice)
+    if (filters.minGPUs) params.append('min_gpus', filters.minGPUs)
+
+    const res = await fetch(`/api/v1/gpu/instances?${params}`)
+    const data = await res.json()
+
+    let list = (data.instances || []).map(inst => ({
+      id: inst.id,
+      provider: inst.provider === 'vast.ai' ? 'vastai' : inst.provider,
+      gpu_name: inst.gpu_type,
+      num_gpus: inst.num_gpus,
+      gpu_ram_display: inst.gpu_ram >= 1024 ? `${(inst.gpu_ram / 1024).toFixed(0)}GB` : `${inst.gpu_ram}MB`,
+      price_per_hour: inst.price,
+      location: inst.location || '未知地区',
+      reliability: inst.reliability,
+      disk_space: inst.disk_space,
+    }))
+
+    if (filters.sortBy === 'price') {
+      list.sort((a, b) => a.price_per_hour - b.price_per_hour)
+    } else if (filters.sortBy === 'price_desc') {
+      list.sort((a, b) => b.price_per_hour - a.price_per_hour)
+    } else if (filters.sortBy === 'gpu_ram') {
+      list.sort((a, b) => {
+        const ra = parseFloat(a.gpu_ram_display) || 0
+        const rb = parseFloat(b.gpu_ram_display) || 0
+        return rb - ra
+      })
+    }
+
+    instances.value = list
+
+    // 提取去重 GPU 类型
+    const gpuSet = new Set(list.map(o => o.gpu_name))
+    gpuTypeOptions.value = Array.from(gpuSet)
+  } catch (err) {
+    console.error('Failed to fetch instances:', err)
+  } finally {
+    instancesLoading.value = false
   }
+}
+
+const fetchProviderOptions = async () => {
+  try {
+    const res = await fetch('/api/v1/gpu/providers')
+    if (!res.ok) return
+    const data = await res.json()
+    const names = { vastai: 'Vast.ai', autodl: 'AutoDL', ppio: 'PPIO', local: '本地' }
+    providerOptions.value = (data.providers || []).map(p => ({
+      value: p.name,
+      label: names[p.name] || p.name
+    }))
+  } catch (err) {
+    console.error('Failed to fetch providers:', err)
+  }
+}
+
+const openImageSelector = async () => {
+  showImageSelector.value = true
+  imageLoading.value = true
+  try {
+    const [favRes, privRes] = await Promise.all([
+      fetch(`/api/v1/images/favorites?user_id=default`),
+      fetch('/api/v1/images/private?provider=ppio')
+    ])
+    if (favRes.ok) {
+      const favData = await favRes.json()
+      favoriteImages.value = favData.favorites || []
+    }
+    if (privRes.ok) {
+      const privData = await privRes.json()
+      privateImages.value = privData.images || []
+    }
+  } catch (err) {
+    console.error('Failed to load images:', err)
+    ElMessage.error('加载镜像列表失败')
+  } finally {
+    imageLoading.value = false
+  }
+}
+
+const pickImage = (imageName) => {
+  form.image = imageName
+  showImageSelector.value = false
+  ElMessage.success(`已选择镜像: ${imageName}`)
+}
+
+const formatStars = (count) => {
+  if (count >= 1000000) return (count / 1000000).toFixed(1) + 'M'
+  if (count >= 1000) return (count / 1000).toFixed(1) + 'k'
+  return count.toString()
+}
+
+const selectInstance = (inst) => {
+  selectedInstance.value = inst
+  form.provider = inst.provider
+  form.offer_id = inst.id
+  form.gpu_name = inst.gpu_name
+  form.num_gpus = inst.num_gpus
+  form.price_per_hour = inst.price_per_hour
+  form.disk_size = Math.max(form.disk_size, Math.ceil(inst.disk_space / 10) * 10)
+}
+
+const clearSelection = () => {
+  selectedInstance.value = null
+  form.provider = ''
+  form.offer_id = ''
+  form.gpu_name = 'CPU'
+  form.num_gpus = 0
+  form.price_per_hour = 0
+}
+
+const formatPrice = (price) => {
+  const n = parseFloat(price)
+  return isNaN(n) ? '0.00' : n.toFixed(2)
+}
+
+const formatDisk = (disk) => {
+  const n = parseFloat(disk)
+  return isNaN(n) ? '0.0' : n.toFixed(1)
+}
+
+const getProviderInitial = (p) => {
+  const map = { vastai: 'V', autodl: 'A', ppio: 'P', local: 'L' }
+  return map[p] || p?.[0]?.toUpperCase() || '?'
+}
+
+const addEnv = () => {
+  form.env_vars.push('')
+}
+
+const removeEnv = (index) => {
+  form.env_vars.splice(index, 1)
+}
+
+// 存储路径选择器
+const showStorageSelector = ref(false)
+const currentStorageIndex = ref(0)
+
+const openStorageSelector = (index) => {
+  currentStorageIndex.value = index
+  showStorageSelector.value = true
+}
+
+const onStorageSelect = (path) => {
+  form.storage_bindings[currentStorageIndex.value].path = path
+}
+
+const addStorageBinding = () => {
+  form.storage_bindings.push({ type: 'input', env_name: '', path: '' })
+}
+
+const removeStorageBinding = (index) => {
+  form.storage_bindings.splice(index, 1)
 }
 
 const handleSubmit = async () => {
-  if (!form.name || !form.command) {
-    ElMessage.error('请填写必填项')
+  try {
+    await formRef.value.validate()
+  } catch {
+    showConfirm.value = false
+    ElMessage.error('请完善表单信息')
     return
   }
 
   try {
     loading.value = true
+    // 从 storage_bindings 提取兼容字段
+    const firstInput = form.storage_bindings.find(b => b.type === 'input')
+    const firstOutput = form.storage_bindings.find(b => b.type === 'output')
+
     const taskData = {
       name: form.name,
       description: form.description,
       image: form.image,
       command: form.command,
-      data_path: form.data_path || '',
-      output_path: form.output_path || ''
+      data_path: firstInput?.path || '',
+      output_path: firstOutput?.path || '',
+      env_vars: form.env_vars.filter(Boolean),
+      storage_bindings: form.storage_bindings.filter(b => b.path && b.env_name),
+      provider: form.provider,
+      offer_id: form.offer_id,
+      gpu_name: form.gpu_name,
+      num_gpus: form.num_gpus,
+      disk_size: form.disk_size,
+      duration_hours: form.duration_hours
     }
 
     await taskStore.createTask(taskData)
+    showConfirm.value = false
     ElMessage.success('任务创建成功')
     router.push('/tasks')
   } catch (err) {
@@ -318,12 +710,57 @@ const handleSubmit = async () => {
     loading.value = false
   }
 }
+
+onMounted(() => {
+  fetchProviderOptions()
+  loadCopiedTask()
+})
+
+const loadCopiedTask = () => {
+  const raw = sessionStorage.getItem('taskCopyData')
+  if (!raw) return
+  try {
+    const data = JSON.parse(raw)
+    sessionStorage.removeItem('taskCopyData')
+
+    if (data.name) form.name = data.name
+    if (data.description !== undefined) form.description = data.description
+    if (data.image) form.image = data.image
+    if (data.command !== undefined) form.command = data.command
+    if (Array.isArray(data.env_vars)) form.env_vars = [...data.env_vars]
+
+    // 算力配置留空，强制本地模式让用户重新选择
+    setLocalMode()
+
+    // 存储绑定：优先使用复制的，没有则根据 data_path/output_path 回退
+    if (Array.isArray(data.storage_bindings) && data.storage_bindings.length > 0) {
+      form.storage_bindings = data.storage_bindings.map(b => ({
+        type: b.type || 'input',
+        env_name: b.env_name || '',
+        path: b.path || ''
+      }))
+    } else if (data.data_path || data.output_path) {
+      const bindings = []
+      if (data.data_path) {
+        bindings.push({ type: 'input', env_name: 'DATA_PATH', path: data.data_path })
+      }
+      if (data.output_path) {
+        bindings.push({ type: 'output', env_name: 'OUTPUT_PATH', path: data.output_path })
+      }
+      if (bindings.length > 0) form.storage_bindings = bindings
+    }
+  } catch (err) {
+    console.error('Failed to load copied task:', err)
+  }
+}
 </script>
 
 <style scoped>
 .task-create-page {
-  max-width: 1200px;
+  width: 100%;
   margin: 0 auto;
+  padding: 0 40px;
+  box-sizing: border-box;
 }
 
 .page-header {
@@ -343,126 +780,173 @@ const handleSubmit = async () => {
   color: var(--text-secondary);
 }
 
-/* 步骤指示器 */
-.step-indicator {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 32px;
-  padding: 24px;
+/* 表单分区 */
+.form-section {
   background: var(--bg-secondary);
-  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  margin-bottom: 24px;
+  overflow: hidden;
 }
 
-.step-item {
+.section-title {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 24px;
-  position: relative;
+  padding: 20px 24px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: rgba(79, 70, 229, 0.03);
+  border-bottom: 1px solid var(--border-color);
 }
 
-.step-item:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  right: -24px;
-  width: 48px;
-  height: 2px;
-  background: var(--border-color);
-}
-
-.step-item.completed:not(:last-child)::after {
-  background: var(--primary-color);
-}
-
-.step-number {
-  width: 32px;
-  height: 32px;
+.section-num {
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: var(--bg-primary);
-  border: 2px solid var(--border-color);
+  background: var(--primary-color);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 14px;
-  color: var(--text-secondary);
-  transition: all 0.3s;
+  flex-shrink: 0;
 }
 
-.step-item.active .step-number {
-  background: var(--primary-color);
-  border-color: var(--primary-color);
-  color: white;
+.section-body {
+  padding: 24px;
 }
 
-.step-item.completed .step-number {
-  background: var(--primary-color);
-  border-color: var(--primary-color);
-  color: white;
+/* 模式切换 */
+.mode-switch {
+  display: flex;
+  gap: 8px;
 }
 
-.step-number svg {
-  width: 16px;
-  height: 16px;
-}
-
-.step-label {
+.mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
   font-size: 14px;
   font-weight: 500;
   color: var(--text-secondary);
+  background: var(--bg-primary);
 }
 
-.step-item.active .step-label {
-  color: var(--text-primary);
+.mode-btn:hover {
+  border-color: var(--primary-color);
 }
 
-/* 表单容器 */
-.form-container {
-  display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 24px;
+.mode-btn.active {
+  border-color: var(--primary-color);
+  background: rgba(79, 70, 229, 0.05);
+  color: var(--primary-color);
 }
 
-.form-card {
-  border-radius: var(--radius-lg);
-}
-
-.step-content {
-  padding: 8px 0;
-}
-
-.step-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-
-.step-description {
-  font-size: 14px;
+.local-hint {
+  padding: 16px;
+  background: rgba(79, 70, 229, 0.04);
+  border-radius: var(--radius-md);
+  font-size: 13px;
   color: var(--text-secondary);
-  margin-bottom: 24px;
+  border: 1px dashed var(--border-color);
 }
 
-.input-icon {
-  width: 18px;
-  height: 18px;
-  color: var(--text-secondary);
+/* 已选实例摘要 */
+.selected-instance-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(79, 70, 229, 0.06);
+  border: 1px solid var(--primary-color);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
 }
 
-/* 镜像选择 */
-.image-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-.image-option {
+.selected-info {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px;
+  flex-wrap: wrap;
+}
+
+.selected-badge {
+  background: var(--primary-color);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.selected-gpu {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.selected-price {
+  color: #2563eb;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.selected-provider {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: white;
+  text-transform: uppercase;
+}
+
+.selected-provider.vastai { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+.selected-provider.autodl { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+.selected-provider.ppio { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+.selected-provider.local { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+
+/* 实例筛选器 */
+.instance-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+/* 实例网格 */
+.instance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.instance-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 32px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.instance-card {
+  padding: 14px;
   background: var(--bg-primary);
   border: 2px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -471,177 +955,392 @@ const handleSubmit = async () => {
   position: relative;
 }
 
-.image-option:hover {
+.instance-card:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  transform: translateY(-1px);
+}
+
+.instance-card.selected {
+  border-color: var(--primary-color);
+  background: rgba(79, 70, 229, 0.04);
+}
+
+.inst-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.inst-provider {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+  color: white;
+}
+
+.inst-provider.vastai { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+.inst-provider.autodl { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+.inst-provider.ppio { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+.inst-provider.local { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+
+.inst-price-num {
+  font-size: 18px;
+  font-weight: 700;
+  color: #2563eb;
+}
+
+.inst-price-unit {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.inst-gpu {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.inst-gpu-count {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.inst-specs {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.inst-selected-mark {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+/* 资源网格 */
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+/* 镜像选择触发器 */
+.image-select-trigger {
+  cursor: pointer;
+}
+
+.image-readonly-input :deep(.el-input__wrapper) {
+  cursor: pointer;
+  background: var(--bg-primary);
+  width: 600px;
+}
+
+/* 镜像选择弹窗 */
+.image-selector-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  background: var(--bg-secondary);
+  padding: 4px;
+  border-radius: var(--radius-lg);
+  width: fit-content;
+}
+
+.image-tab {
+  padding: 8px 20px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.image-tab:hover {
+  color: var(--text-primary);
+}
+
+.image-tab.active {
+  background: white;
+  color: var(--primary-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.image-loading {
+  padding: 20px;
+}
+
+.image-list {
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.image-list-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+}
+
+.image-list-empty p {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.image-list-empty span {
+  font-size: 12px;
+}
+
+.image-list-item {
+  padding: 14px 16px;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg-primary);
+  margin-bottom: 10px;
+}
+
+.image-list-item:hover {
   border-color: var(--primary-color);
 }
 
-.image-option.selected {
+.image-list-item.selected {
   border-color: var(--primary-color);
   background: rgba(79, 70, 229, 0.05);
 }
 
-.image-icon {
-  width: 40px;
-  height: 40px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--primary-color);
-}
-
-.image-icon svg {
-  width: 20px;
-  height: 20px;
-}
-
-.image-info {
-  flex: 1;
-}
-
-.image-name {
+.image-list-name {
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
-  display: block;
-  margin-bottom: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  word-break: break-all;
+  margin-bottom: 4px;
 }
 
-.image-desc {
+.image-list-desc {
   font-size: 12px;
   color: var(--text-secondary);
+  margin-bottom: 8px;
+  line-height: 1.4;
 }
 
-.selected-check {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  background: var(--primary-color);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-}
-
-.selected-check svg {
-  width: 14px;
-  height: 14px;
-}
-
-.custom-image {
-  margin-top: 16px;
-}
-
-.command-input code {
-  background: var(--bg-primary);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 12px;
-  color: var(--primary-color);
-}
-
-.form-tip {
+.image-list-meta {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+}
+
+.official-tag {
+  background: #dcfce7;
+  color: #166534;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.private-tag {
+  background: #e0e7ff;
+  color: #3730a3;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.star-count {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
   color: var(--text-secondary);
+}
+
+.star-count svg {
+  color: #f59e0b;
+}
+
+/* 环境变量 */
+.env-vars-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+.env-row {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.add-env-btn {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin-top: 4px;
+}
+
+/* 存储配置 */
+.storage-bindings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.storage-binding-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.storage-path-trigger {
+  flex: 1;
+  cursor: pointer;
+}
+
+.storage-path-trigger :deep(.el-input__wrapper) {
+  cursor: pointer;
+  background: var(--bg-primary);
+}
+
+.add-storage-btn {
   margin-top: 8px;
 }
 
-.tip-icon {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-
-/* 步骤按钮 */
-.form-actions {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 32px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border-color);
-}
-
-.btn-icon {
-  width: 18px;
-  height: 18px;
-  margin-right: 8px;
-}
-
-/* 配置预览 */
-.config-preview {
-  position: sticky;
-  top: 24px;
-}
-
-.preview-card {
-  border-radius: var(--radius-lg);
-}
-
-.preview-content {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.preview-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.preview-label {
+/* 字段提示 */
+.field-hint {
   font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+}
+
+.field-hint code {
+  background: var(--bg-primary);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--primary-color);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* 底部操作 */
+.form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 24px 0 40px;
+}
+
+/* 确认弹窗 */
+.confirm-body {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.confirm-section {
+  margin-bottom: 20px;
+}
+
+.confirm-section h4 {
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  margin: 0 0 10px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.preview-value {
-  font-size: 14px;
+.confirm-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.confirm-label {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.confirm-value {
   color: var(--text-primary);
   font-weight: 500;
+  text-align: right;
+  word-break: break-all;
 }
 
-.preview-code {
+.confirm-value.code {
+  font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
-  font-family: monospace;
-  background: var(--bg-primary);
-  padding: 8px 12px;
+  background: var(--bg-secondary);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.storage-binding-confirm {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  background: var(--bg-secondary);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+}
+
+.env-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: right;
+}
+
+.env-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  background: var(--bg-secondary);
+  padding: 4px 8px;
   border-radius: var(--radius-sm);
   word-break: break-all;
 }
 
 /* 响应式 */
-@media (max-width: 1024px) {
-  .form-container {
+@media (max-width: 768px) {
+  .resource-grid {
     grid-template-columns: 1fr;
-  }
-
-  .config-preview {
-    display: none;
   }
 
   .image-grid {
     grid-template-columns: 1fr;
   }
-}
 
-@media (max-width: 768px) {
-  .step-indicator {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-
-  .step-item:not(:last-child)::after {
-    display: none;
+  .provider-options {
+    grid-template-columns: 1fr 1fr;
   }
 }
 </style>

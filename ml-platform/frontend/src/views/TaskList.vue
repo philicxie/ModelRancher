@@ -72,24 +72,6 @@
               <span class="status-dot" :class="task.status"></span>
               <span class="status-text">{{ getStatusLabel(task.status) }}</span>
             </div>
-            <el-dropdown trigger="click">
-              <el-button size="small" text>
-                <svg class="more-icon" viewBox="0 0 24 24" fill="currentColor">
-                  <circle cx="12" cy="5" r="2"/>
-                  <circle cx="12" cy="12" r="2"/>
-                  <circle cx="12" cy="19" r="2"/>
-                </svg>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item @click="viewDetail(task.id)">查看详情</el-dropdown-item>
-                  <el-dropdown-item
-                    v-if="task.status === 'pending' || task.status === 'running'"
-                    @click="handleCancel(task.id)"
-                    divided>取消任务</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
           </div>
 
           <div class="task-card-body">
@@ -97,19 +79,10 @@
             <p class="task-description" v-if="task.description">{{ task.description }}</p>
 
             <div class="task-meta">
-              <div class="meta-item">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                  <circle cx="8.5" cy="8.5" r="1.5"/>
-                  <polyline points="21 15 16 10 5 21"/>
-                </svg>
-                <span class="image-tag">{{ task.image.split(':')[0] }}</span>
+              <div class="meta-item meta-image">
+                <span class="image-name">{{ getShortImageName(task.image) }}</span>
               </div>
-              <div class="meta-item">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <polyline points="12 6 12 12 16 14"/>
-                </svg>
+              <div class="meta-item meta-time">
                 <span>{{ formatTime(task.created_at) }}</span>
               </div>
             </div>
@@ -123,16 +96,22 @@
           </div>
 
           <div class="task-card-footer">
-            <el-button size="small" @click="viewDetail(task.id)">
-              查看详情
-            </el-button>
+            <el-button size="small" @click="viewDetail(task.id)">查看详情</el-button>
+            <el-button size="small" plain @click="handleCopy(task)">复制任务</el-button>
             <el-button
               v-if="task.status === 'pending' || task.status === 'running'"
               size="small"
-              type="danger"
+              type="warning"
               plain
               @click="handleCancel(task.id)">
               取消
+            </el-button>
+            <el-button
+              size="small"
+              type="danger"
+              plain
+              @click="handleDelete(task)">
+              删除
             </el-button>
           </div>
         </div>
@@ -146,7 +125,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTaskStore } from '../stores/task'
 import { storeToRefs } from 'pinia'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
 const taskStore = useTaskStore()
@@ -190,8 +169,31 @@ const formatTime = (time) => {
   return new Date(time).toLocaleString('zh-CN')
 }
 
+const getShortImageName = (image) => {
+  if (!image) return '-'
+  const withoutTag = image.split(':')[0]
+  const parts = withoutTag.split('/')
+  return parts[parts.length - 1] || withoutTag
+}
+
 const viewDetail = (id) => {
   router.push(`/task/${id}`)
+}
+
+const handleCopy = (task) => {
+  const copyData = {
+    name: task.name + ' 的副本',
+    description: task.description || '',
+    image: task.image || '',
+    command: task.command || '',
+    env_vars: task.env_vars || [],
+    storage_bindings: task.storage_bindings || [],
+    data_path: task.data_path || '',
+    output_path: task.output_path || ''
+  }
+  sessionStorage.setItem('taskCopyData', JSON.stringify(copyData))
+  router.push('/create')
+  ElMessage.success('已加载任务配置，请重新配置算力')
 }
 
 const handleCancel = async (id) => {
@@ -200,6 +202,22 @@ const handleCancel = async (id) => {
     ElMessage.success('任务已取消')
   } catch (err) {
     ElMessage.error('取消失败')
+  }
+}
+
+const handleDelete = async (task) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除任务 "${task.name}" 吗？此操作不可恢复。`,
+      '删除确认',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+    )
+    await taskStore.deleteTask(task.id)
+    ElMessage.success('任务已删除')
+  } catch (err) {
+    if (err !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
   }
 }
 </script>
@@ -430,27 +448,32 @@ const handleCancel = async (id) => {
 
 .task-meta {
   display: flex;
-  gap: 16px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 16px;
 }
 
 .meta-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   font-size: 12px;
   color: var(--text-secondary);
 }
 
-.meta-item svg {
-  width: 14px;
-  height: 14px;
+.meta-image {
+  flex: 1;
+  min-width: 0;
 }
 
-.image-tag {
-  padding: 2px 8px;
-  background: #f1f5f9;
-  border-radius: 4px;
+.image-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta-time {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .task-progress {
@@ -480,7 +503,7 @@ const handleCancel = async (id) => {
 
 .task-card-footer {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   padding: 16px 20px;
   border-top: 1px solid var(--border-color);
   background: var(--bg-primary);

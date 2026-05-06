@@ -317,7 +317,6 @@ func (s *InstanceService) pollAllRunningMetrics(ctx context.Context) {
 			// 请求最近 60 秒的数据，默认 15 秒间隔
 			endTime := time.Now().Unix()
 			startTime := endTime - 60
-			log.Printf("[metrics] Polling %s (provider=%s, providerInstID=%s) range=[%d, %d]", instID, inst.Provider, providerInstID, startTime, endTime)
 			m, err := prov.GetInstanceMetrics(pCtx, providerInstID, startTime, endTime)
 			if err != nil {
 				log.Printf("[metrics] Range query failed for %s: %v, trying fallback", instID, err)
@@ -331,7 +330,6 @@ func (s *InstanceService) pollAllRunningMetrics(ctx context.Context) {
 			s.mergeMetrics(instID, m)
 		}(inst.ID, inst.ProviderInstID, p)
 	}
-	log.Printf("[metrics] Polling loop started for %d instances", pollCount)
 }
 
 func (s *InstanceService) mergeMetrics(instID string, m *provider.InstanceMetrics) {
@@ -355,9 +353,6 @@ func (s *InstanceService) mergeMetrics(instID string, m *provider.InstanceMetric
 	if len(m.GPUMemUtilizationAvg) > 0 {
 		gpuMemVal = m.GPUMemUtilizationAvg[len(m.GPUMemUtilizationAvg)-1].Value
 	}
-
-	log.Printf("[metrics] mergeMetrics for %s: cpuVal=%.1f, memVal=%.1f, diskVal=%.1f, gpuVal=%.1f, gpuMemVal=%.1f, cpuPoints=%d",
-		instID, cpuVal, memVal, diskVal, gpuVal, gpuMemVal, len(m.CPUUtilization))
 
 	// 对于 PPIO 返回的多条时序数据，逐条追加
 	if len(m.CPUUtilization) > 1 {
